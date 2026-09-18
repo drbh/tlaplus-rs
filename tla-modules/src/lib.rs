@@ -1,3 +1,7 @@
+//! Module loading: resolving `EXTENDS` and `INSTANCE` against the standard
+//! library and search paths, reading model configurations, and the
+//! pre-lowering rewrites a configuration asks for. [`load`] is the entry
+//! point; [`Config`] is what a `.cfg` file or `CONFIG` section becomes.
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},

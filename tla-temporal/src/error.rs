@@ -12,7 +12,9 @@ pub enum Error {
     /// A report and the model it came from disagree.
     InconsistentReport(&'static str),
     /// The property search over the behavior graph failed.
-    Search(String),
+    Search(tla_props::Error),
+    /// The product of graph and formula grew past the configured limit.
+    ProductLimit,
 }
 
 impl fmt::Display for Error {
@@ -24,7 +26,10 @@ impl fmt::Display for Error {
             }
             Self::MissingPredicate(name) => write!(f, "missing temporal predicate {name}"),
             Self::InconsistentReport(what) => f.write_str(what),
-            Self::Search(message) => f.write_str(message),
+            Self::Search(e) => e.fmt(f),
+            Self::ProductLimit => {
+                f.write_str("liveness product limit reached; result is incomplete")
+            }
         }
     }
 }

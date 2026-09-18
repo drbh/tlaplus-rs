@@ -1,3 +1,6 @@
+//! Deferred value expressions: sets and functions kept symbolic until a
+//! consumer needs their elements, plus TLC-compatible rendering of values.
+//! [`Expr`] wraps a [`Value`] or a lazy set or function over values.
 mod functions;
 pub use functions::{quoted, stringify};
 mod sets;
@@ -80,7 +83,7 @@ impl Expr {
             entries: values
                 .into_iter()
                 .enumerate()
-                .map(|(i, v)| (Value::Int(i as i32 + 1), v))
+                .map(|(i, v)| (Value::position(i), v))
                 .collect(),
         }
     }

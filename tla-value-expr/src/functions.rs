@@ -107,7 +107,7 @@ impl Expr {
             .into_iter()
             .enumerate()
             .map(|(i, (key, value))| {
-                if key == Value::Int(i as i32 + 1) {
+                if key == Value::position(i) {
                     Ok(value)
                 } else {
                     Err(Error::Type("sequence"))

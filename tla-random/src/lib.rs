@@ -1,3 +1,6 @@
+//! Random choice as TLC makes it: `RandomElement`, `RandomSubset` and the
+//! randomized set operators, driven by a Java-compatible generator so that
+//! seeded runs reproduce TLC's draws.
 mod sample;
 mod subset;
 use std::{

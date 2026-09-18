@@ -8,7 +8,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::tool::{Message, extract_messages, extract_records};
-use crate::{Answers, Comparison, Difference, compare};
+use crate::{Answers, Comparison, Difference, Error, compare};
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Corpus {
@@ -100,13 +100,11 @@ struct RecordedMessage {
 impl Corpus {
     /// Load a JUnit manifest, an Examples recording, an extracted snapshot, or
     /// a directory of Examples recordings. Gzip is detected from the extension.
-    pub fn read(path: &Path) -> Result<Self, String> {
+    pub fn read(path: &Path) -> Result<Self, Error> {
         let result = if path.is_dir() {
-            let mut paths = fs::read_dir(path)
-                .map_err(|e| e.to_string())?
+            let mut paths = fs::read_dir(path)?
                 .map(|entry| entry.map(|e| e.path()))
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|e| e.to_string())?;
+                .collect::<Result<Vec<_>, _>>()?;
             paths.sort();
             let mut corpus = Self::default();
             for path in paths.into_iter().filter(|p| {
@@ -120,43 +118,44 @@ impl Corpus {
         } else {
             Self::read_file(path)
         };
-        let corpus = result.map_err(|e: String| format!("{}: {e}", path.display()))?;
+        let corpus = result.map_err(|e| Error::Corpus(format!("{}: {e}", path.display())))?;
         if corpus.answers.is_empty() {
-            return Err(format!("{}: no oracle cases found", path.display()));
+            return Err(Error::Corpus(format!(
+                "{}: no oracle cases found",
+                path.display()
+            )));
         }
         Ok(corpus)
     }
 
-    fn insert(&mut self, id: String, answers: Answers) -> Result<(), String> {
+    fn insert(&mut self, id: String, answers: Answers) -> Result<(), Error> {
         if self.answers.contains_key(&id) {
-            return Err(format!("duplicate oracle case: {id}"));
+            return Err(Error::Corpus(format!("duplicate oracle case: {id}")));
         }
         self.answers.insert(id, answers);
         Ok(())
     }
 
-    fn read_file(path: &Path) -> Result<Self, String> {
-        let file = fs::File::open(path).map_err(|e| e.to_string())?;
+    fn read_file(path: &Path) -> Result<Self, Error> {
+        let file = fs::File::open(path)?;
         let mut reader: Box<dyn Read> = if path.extension().is_some_and(|e| e == "gz") {
             Box::new(flate2::read::GzDecoder::new(file))
         } else {
             Box::new(file)
         };
         let mut text = String::new();
-        reader
-            .read_to_string(&mut text)
-            .map_err(|e| e.to_string())?;
+        reader.read_to_string(&mut text)?;
         Self::from_json(&text)
     }
 
-    pub fn from_json(text: &str) -> Result<Self, String> {
-        let json: serde_json::Value = serde_json::from_str(text).map_err(|e| e.to_string())?;
+    pub fn from_json(text: &str) -> Result<Self, Error> {
+        let json: serde_json::Value = serde_json::from_str(text)?;
         if json.get("answers").is_some() {
-            return serde_json::from_value(json).map_err(|e| e.to_string());
+            return Ok(serde_json::from_value(json)?);
         }
         let mut corpus = Self::default();
         if json.get("cases").is_some() {
-            let manifest: Manifest = serde_json::from_value(json).map_err(|e| e.to_string())?;
+            let manifest: Manifest = serde_json::from_value(json)?;
             for case in manifest.cases {
                 for method in case.methods {
                     let id = format!("{}#{}", case.class, method.method);
@@ -179,12 +178,12 @@ impl Corpus {
                             .map(|(code, params)| (*code, params.as_slice())),
                         method.actual_exit_status,
                     )
-                    .map_err(|e| format!("{id}: {e}"))?;
+                    .map_err(|e| Error::Corpus(format!("{id}: {e}")))?;
                     corpus.insert(id, answers)?;
                 }
             }
         } else {
-            let example: Example = serde_json::from_value(json).map_err(|e| e.to_string())?;
+            let example: Example = serde_json::from_value(json)?;
             let exit = if example.run.run_status == "completed" {
                 example.run.returncode
             } else {

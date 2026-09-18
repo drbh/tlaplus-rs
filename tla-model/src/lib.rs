@@ -1,3 +1,7 @@
+//! A configured model: a lowered program bound to constant values, the
+//! [`Checks`] a configuration asks for and the [`Runtime`] state of a run.
+//! [`BoundModel`] implements the engine's transition system by generating
+//! initial states and successors.
 mod constants;
 mod generate;
 pub use constants::materialize as materialize_constants;
@@ -7,6 +11,10 @@ pub use tla_eval::{Error, Value, literal};
 use tla_ir::{ExprId, Program};
 
 pub type State = tla_engine::Leveled<Vec<Value>>;
+
+/// A lowered program with its constants bound, ready to generate states.
+/// `program` and `constants` are fixed after binding; `checks` says what to
+/// explore and verify; `runtime` is the mutable state of one run.
 #[derive(Clone, Debug)]
 pub struct BoundModel {
     pub program: Program,
@@ -91,6 +99,8 @@ impl BoundModel {
         evaluator.worker = rayon::current_thread_index();
         evaluator.level = level;
         evaluator.started = self.runtime.started;
+        // Worker threads share the string table; only the main thread may
+        // assign new ordinals, so workers see a consistent numbering.
         evaluator.intern_new_strings = evaluator.worker.is_none();
         evaluator
     }
@@ -99,16 +109,22 @@ impl BoundModel {
         assumptions: &[ExprId],
         workers: std::num::NonZeroUsize,
     ) -> Result<Option<usize>, Error> {
-        self.runtime.registers.begin_setup(workers).map_err(Error)?;
+        self.runtime
+            .registers
+            .begin_setup(workers)
+            .map_err(Error::from)?;
         self.runtime.random.begin_setup();
-        self.runtime.caches.begin_setup().map_err(Error)?;
+        self.runtime.caches.begin_setup().map_err(Error::from)?;
         for (index, expression) in assumptions.iter().enumerate() {
             if !self.evaluate(*expression, &[], &[])?.boolean()? {
                 return Ok(Some(index));
             }
         }
-        self.runtime.registers.capture_setup().map_err(Error)?;
-        self.runtime.caches.capture_setup().map_err(Error)?;
+        self.runtime
+            .registers
+            .capture_setup()
+            .map_err(Error::from)?;
+        self.runtime.caches.capture_setup().map_err(Error::from)?;
         self.runtime.random.capture_setup()?;
         Ok(None)
     }
@@ -146,9 +162,6 @@ impl BoundModel {
             checks: Checks::default(),
         }
     }
-    pub fn bind_constants(&mut self, bindings: &[(usize, ExprId)]) -> Result<(), Error> {
-        self.configure_constants(bindings, &[])
-    }
     pub fn configure_constants(
         &mut self,
         bindings: &[(usize, ExprId)],
@@ -176,7 +189,7 @@ impl BoundModel {
         )?;
         self.set_constants(values)?;
         self.runtime.random = self.runtime.random.checkpoint()?;
-        self.runtime.caches = self.runtime.caches.checkpoint().map_err(Error)?;
+        self.runtime.caches = self.runtime.caches.checkpoint().map_err(Error::from)?;
         Ok(())
     }
     pub fn cache_constants(&mut self, operators: std::ops::Range<usize>) -> Result<(), Error> {
@@ -201,6 +214,8 @@ impl BoundModel {
             {
                 continue;
             }
+            // A constant body that fails now is left as it is; the error
+            // surfaces where the definition is used, as TLC reports it.
             if let Ok(value) = self.evaluate(body, &[], &[]) {
                 let body = self
                     .program
@@ -209,7 +224,7 @@ impl BoundModel {
             }
         }
         self.runtime.random = self.runtime.random.checkpoint()?;
-        self.runtime.caches = self.runtime.caches.checkpoint().map_err(Error)?;
+        self.runtime.caches = self.runtime.caches.checkpoint().map_err(Error::from)?;
         Ok(())
     }
     pub fn set_constants(&mut self, constants: Vec<Value>) -> Result<(), Error> {
@@ -243,20 +258,20 @@ impl BoundModel {
         let mut fields = Vec::new();
         let mut published = std::collections::BTreeMap::new();
         for (name, count) in counts.into_iter().chain([("duration", 0), ("worker", 0)]) {
-            let key =
-                tla_eval::intern_string(&self.runtime.strings, name.into(), true).map_err(Error)?;
+            let key = tla_eval::intern_string(&self.runtime.strings, name.into(), true)?;
             fields.push((key, int(count)));
             published.insert(name.to_owned(), int(count));
         }
         published.insert("stats".into(), Value::function(fields)?);
-        self.runtime.registers.publish(published).map_err(Error)
+        self.runtime
+            .registers
+            .publish(published)
+            .map_err(Error::from)
     }
     /// Publishes `_POSSIBLE` counts as TLC's `_Possible` module reads them:
     /// `TLCGet("all:named")["s:_possible"]`, one record per worker.
     pub fn publish_possible(&self, counts: &[(String, usize)]) -> Result<(), Error> {
-        let string = |text: &str| {
-            tla_eval::intern_string(&self.runtime.strings, text.into(), true).map_err(Error)
-        };
+        let string = |text: &str| tla_eval::intern_string(&self.runtime.strings, text.into(), true);
         let fields = counts
             .iter()
             .map(|(name, n)| {
@@ -269,7 +284,10 @@ impl BoundModel {
         let workers = Value::tuple(vec![Value::function(fields)?]);
         let registers = Value::function(vec![(string("s:_possible")?, workers)])?;
         let published = std::collections::BTreeMap::from([("all:named".to_owned(), registers)]);
-        self.runtime.registers.publish(published).map_err(Error)
+        self.runtime
+            .registers
+            .publish(published)
+            .map_err(Error::from)
     }
     /// Seeds random operators as TLC's `-seed` does before any evaluation.
     pub fn seed(&mut self, seed: i64) {
@@ -287,12 +305,15 @@ impl BoundModel {
         let polynomial = self
             .program
             .fingerprint_polynomial
-            .unwrap_or(0x9114_98ae_0e66_bad6);
+            .unwrap_or(tla_ir::DEFAULT_FINGERPRINT_POLYNOMIAL);
         let fingerprint = self.key(state)?.iter().fold(polynomial, |fp, value| {
             value.extend_fingerprint(fp, polynomial)
         });
         Ok(self.runtime.random.begin(Some(fingerprint))?)
     }
+    /// Evaluates `id` in `state` (and `next` for action-level expressions).
+    /// Constant expressions pass an empty `state`, which is depth 0; any real
+    /// state is treated as depth 1, enough for `TLCGet("level")` style queries.
     pub fn evaluate(&self, id: ExprId, state: &[Value], next: &[Value]) -> Result<Value, Error> {
         self.evaluate_at(id, state, next, usize::from(!state.is_empty()))
     }
@@ -352,6 +373,17 @@ impl BoundModel {
         )
     }
 }
+impl BoundModel {
+    /// Resets run state for the initial predicate. `false` means the model has
+    /// no behavior to generate: no variables and no `INIT`.
+    fn begin_initial(&self) -> Result<bool, Error> {
+        self.runtime.registers.reset()?;
+        self.runtime.caches.reset()?;
+        self.runtime.random.begin(None)?;
+        Ok(!(self.checks.init.is_empty() && self.program.variables.is_empty()))
+    }
+}
+
 impl TransitionSystem for BoundModel {
     type State = State;
     type Key = Vec<Value>;
@@ -378,10 +410,7 @@ impl TransitionSystem for BoundModel {
             )
     }
     fn initial_states(&self) -> Result<Vec<State>, Error> {
-        self.runtime.registers.reset().map_err(Error)?;
-        self.runtime.caches.reset().map_err(Error)?;
-        self.runtime.random.begin(None)?;
-        if self.checks.init.is_empty() && self.program.variables.is_empty() {
+        if !self.begin_initial()? {
             return Ok(Vec::new());
         }
         states(self, &self.checks.init, &Vec::new().into(), true)
@@ -402,10 +431,7 @@ impl TransitionSystem for BoundModel {
         &self,
         output: &mut impl FnMut(State) -> Result<std::ops::ControlFlow<()>, Error>,
     ) -> Result<std::ops::ControlFlow<()>, Error> {
-        self.runtime.registers.reset().map_err(Error)?;
-        self.runtime.caches.reset().map_err(Error)?;
-        self.runtime.random.begin(None)?;
-        if self.checks.init.is_empty() && self.program.variables.is_empty() {
+        if !self.begin_initial()? {
             return Ok(std::ops::ControlFlow::Continue(()));
         }
         generate::visit(self, &self.checks.init, &Vec::new().into(), true, output)

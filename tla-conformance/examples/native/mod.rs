@@ -119,7 +119,9 @@ pub fn expected(path: &Path, ids: &[String]) -> Result<BTreeMap<String, Answers>
         .filter_map(|id| id.strip_prefix("fuzz/"))
         .collect();
     if fuzz.len() != ids.len() {
-        return Ok(tla_bridge::corpus::Corpus::read(path)?.answers);
+        return Ok(tla_bridge::corpus::Corpus::read(path)
+            .map_err(|e| e.to_string())?
+            .answers);
     }
     let mut result = BTreeMap::new();
     for seed in fuzz {
@@ -143,7 +145,8 @@ pub fn expected(path: &Path, ids: &[String]) -> Result<BTreeMap<String, Answers>
                     })
                     .collect::<Vec<_>>();
                 let exit = java["exit"].as_i64().map(|e| e as i32);
-                let mut answers = tla_bridge::tool::extract_messages(&messages, exit)?;
+                let mut answers = tla_bridge::tool::extract_messages(&messages, exit)
+                    .map_err(|e| e.to_string())?;
                 // A run that ended in an exception or evaluation error has no verdict,
                 // even if `-continue` reported violations before it.
                 if messages.iter().any(|m| matches!(m.code, 1000 | 2283)) {

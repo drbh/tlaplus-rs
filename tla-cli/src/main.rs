@@ -1,6 +1,43 @@
+//! The `tla` command: parses arguments, drives `tla-checker`, and renders
+//! outcomes and counterexamples the way TLC reports them.
 mod trace;
-use std::{num::NonZeroUsize, path::PathBuf};
+use std::{fmt, num::NonZeroUsize, path::PathBuf};
 use tla_checker::{Bound, BoundModel, Completion, Disk, Liveness, Outcome, Settings};
+
+/// Why the command could not finish.
+#[derive(Debug)]
+enum Error {
+    Usage(String),
+    Io {
+        path: PathBuf,
+        error: std::io::Error,
+    },
+    Check(tla_checker::Error),
+    /// The timing trace could not be written.
+    Trace(String),
+    Panicked,
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Usage(message) | Self::Trace(message) => f.write_str(message),
+            Self::Io { path, error } => write!(f, "{}: {error}", path.display()),
+            Self::Check(e) => e.fmt(f),
+            Self::Panicked => f.write_str("checker panicked"),
+        }
+    }
+}
+
+impl From<tla_checker::Error> for Error {
+    fn from(e: tla_checker::Error) -> Self {
+        Self::Check(e)
+    }
+}
+
+fn usage(message: impl Into<String>) -> Error {
+    Error::Usage(message.into())
+}
 
 fn main() {
     // Deeply recursive specifications need more than the default main-thread stack.
@@ -8,10 +45,7 @@ fn main() {
         .stack_size(1 << 30)
         .spawn(|| run(std::env::args().skip(1).collect()))
         .expect("start checker thread");
-    match checker
-        .join()
-        .unwrap_or_else(|_| Err("checker panicked".into()))
-    {
+    match checker.join().unwrap_or_else(|_| Err(Error::Panicked)) {
         Ok(code) => std::process::exit(code),
         Err(error) => {
             eprintln!("error: {error}");
@@ -35,7 +69,7 @@ struct Arguments {
 }
 
 impl Arguments {
-    fn parse(args: Vec<String>) -> Result<Self, String> {
+    fn parse(args: Vec<String>) -> Result<Self, Error> {
         let mut result = Self {
             spec: PathBuf::new(),
             config: None,
@@ -53,44 +87,46 @@ impl Arguments {
         while let Some(argument) = args.next() {
             let mut value = || {
                 args.next()
-                    .ok_or_else(|| format!("missing value for {argument}"))
+                    .ok_or_else(|| usage(format!("missing value for {argument}")))
             };
             match argument.as_str() {
                 "-config" | "--config" => result.config = Some(PathBuf::from(value()?)),
                 "-workers" | "--workers" => {
                     result.workers = value()?
                         .parse()
-                        .map_err(|_| "workers must be a positive integer")?
+                        .map_err(|_| usage("workers must be a positive integer"))?
                 }
                 "--max-states" => {
                     result.max_states = Some(
                         value()?
                             .parse()
-                            .map_err(|_| "max-states must be a positive integer")?,
+                            .map_err(|_| usage("max-states must be a positive integer"))?,
                     )
                 }
                 "-deadlock" | "--no-deadlock" => result.check_deadlock = false,
                 "-continue" | "--continue" => result.continue_after_violation = true,
                 "--unicode" => result.unicode = true,
                 "-seed" | "--seed" => {
-                    result.seed = value()?.parse().map_err(|_| "seed must be an integer")?
+                    result.seed = value()?
+                        .parse()
+                        .map_err(|_| usage("seed must be an integer"))?
                 }
                 "--disk" => result.disk = Some(PathBuf::from(value()?)),
                 "--disk-cache-bytes" => {
                     result.disk_cache_bytes = value()?
                         .parse()
-                        .map_err(|_| "disk-cache-bytes must be a positive integer")?
+                        .map_err(|_| usage("disk-cache-bytes must be a positive integer"))?
                 }
                 "--library" => result.libraries.push(PathBuf::from(value()?)),
                 _ if argument.starts_with('-') => {
-                    return Err(format!("unsupported flag {argument}"));
+                    return Err(usage(format!("unsupported flag {argument}")));
                 }
                 _ if result.spec.as_os_str().is_empty() => result.spec = PathBuf::from(argument),
-                _ => return Err("expected exactly one specification".into()),
+                _ => return Err(usage("expected exactly one specification")),
             }
         }
         if result.spec.as_os_str().is_empty() {
-            return Err("missing specification; use --help for usage".into());
+            return Err(usage("missing specification; use --help for usage"));
         }
         if result.spec.extension().is_none() {
             result.spec.set_extension("tla");
@@ -99,18 +135,20 @@ impl Arguments {
     }
 }
 
-fn run(args: Vec<String>) -> Result<i32, String> {
+fn run(args: Vec<String>) -> Result<i32, Error> {
     let path = std::env::var_os("REWRITE_TRACE").map(PathBuf::from);
     let timeline = path.as_ref().map(|_| tla_observe::Timeline::new());
     let result = run_model(args, timeline.as_ref());
     if let (Some(path), Some(timeline)) = (path, timeline) {
-        let file = std::fs::File::create(path).map_err(|e| e.to_string())?;
-        timeline.write(file).map_err(|e| e.to_string())?;
+        let file = std::fs::File::create(&path).map_err(|error| Error::Io { path, error })?;
+        timeline
+            .write(file)
+            .map_err(|e| Error::Trace(e.to_string()))?;
     }
     result
 }
 
-fn run_model(args: Vec<String>, timeline: Option<&tla_observe::Timeline>) -> Result<i32, String> {
+fn run_model(args: Vec<String>, timeline: Option<&tla_observe::Timeline>) -> Result<i32, Error> {
     if args.iter().any(|arg| arg == "--help" || arg == "-h") {
         println!(
             "Usage: tla [--config FILE] [--workers N] [--no-deadlock] [--continue] [--seed N] [--unicode] [--max-states N] [--library DIR] [--disk FILE --disk-cache-bytes N] SPEC.tla\nChecks finite models with INIT/NEXT or SPECIFICATION configuration. Unsupported language and CLI features produce errors."
@@ -119,17 +157,18 @@ fn run_model(args: Vec<String>, timeline: Option<&tla_observe::Timeline>) -> Res
     }
     if args.first().is_some_and(|a| a == "--check-syntax") {
         if args.len() != 2 {
-            return Err("usage: tla --check-syntax FILE".into());
+            return Err(usage("usage: tla --check-syntax FILE"));
         }
-        let text = std::fs::read_to_string(&args[1]).map_err(|e| e.to_string())?;
-        tla_checker::check_syntax(&text).map_err(|e| e.to_string())?;
+        let path = PathBuf::from(&args[1]);
+        let text = std::fs::read_to_string(&path).map_err(|error| Error::Io { path, error })?;
+        tla_checker::check_syntax(&text)?;
         return Ok(0);
     }
     if args.first().is_some_and(|arg| arg == "--check") {
         if args.len() != 2 {
-            return Err("usage: tla --check FILE".into());
+            return Err(usage("usage: tla --check FILE"));
         }
-        tla_checker::check_module(&PathBuf::from(&args[1])).map_err(|e| e.to_string())?;
+        tla_checker::check_module(&PathBuf::from(&args[1]))?;
         return Ok(0);
     }
     let args = Arguments::parse(args)?;
@@ -138,8 +177,7 @@ fn run_model(args: Vec<String>, timeline: Option<&tla_observe::Timeline>) -> Res
         args.config.as_deref(),
         &args.libraries,
         timeline,
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
     let settings = Settings {
         seed: args.seed,
         workers: args.workers,
@@ -147,7 +185,7 @@ fn run_model(args: Vec<String>, timeline: Option<&tla_observe::Timeline>) -> Res
         check_deadlock: args.check_deadlock,
         continue_after_violation: args.continue_after_violation,
     };
-    let mut checker = match tla_checker::bind(loaded, settings).map_err(|e| e.to_string())? {
+    let mut checker = match tla_checker::bind(loaded, settings)? {
         Bound::AssumptionViolated => {
             println!("ASSUME violated");
             return Ok(1);
@@ -163,14 +201,12 @@ fn run_model(args: Vec<String>, timeline: Option<&tla_observe::Timeline>) -> Res
         path,
         cache_bytes: args.disk_cache_bytes,
     });
-    let outcome = checker
-        .run(disk.as_ref(), timeline)
-        .map_err(|e| e.to_string())?;
+    let outcome = checker.run(disk.as_ref(), timeline)?;
     report(&checker.model, outcome, trace::Style::new(args.unicode))
 }
 
 /// Prints an outcome the way TLC reports it and returns the exit code.
-fn report(model: &BoundModel, outcome: Outcome, style: trace::Style) -> Result<i32, String> {
+fn report(model: &BoundModel, outcome: Outcome, style: trace::Style) -> Result<i32, Error> {
     statistics(
         outcome.statistics.initial,
         outcome.statistics.distinct,

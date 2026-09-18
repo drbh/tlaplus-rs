@@ -456,6 +456,7 @@ fn callback_panic_cleans_up_and_nested_oracle_calls_fail_without_deadlocking() {
         assert!(
             run_faithful(Vec::new(), RunEnv::default())
                 .unwrap_err()
+                .to_string()
                 .contains("session is already active")
         );
         assert_eq!(

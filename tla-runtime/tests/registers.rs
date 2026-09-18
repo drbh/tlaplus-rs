@@ -56,7 +56,7 @@ fn run_boundaries_and_clones_do_not_leak_registers() {
     registers.start(NonZeroUsize::MIN).unwrap();
     assert_eq!(
         registers.get(None, &index),
-        Err("TLCGet(0) was undefined.".into())
+        Err(tla_runtime::Error::Undefined("0".into()))
     );
     assert!(registers.set(Some(1), &index, Value::Int(1)).is_err());
     assert!(registers.get(Some(1), &index).is_err());
@@ -64,22 +64,25 @@ fn run_boundaries_and_clones_do_not_leak_registers() {
         registers
             .get(None, &Value::Int(-1))
             .unwrap_err()
+            .to_string()
             .contains("nonnegative integer")
     );
     assert!(
         registers
             .set(None, &Value::Bool(true), Value::Int(1))
             .unwrap_err()
+            .to_string()
             .contains("first argument")
     );
     assert_eq!(
         registers.get(None, &Value::string("nosuch", 2)),
-        Err("TLCGet(nosuch) was undefined.".into())
+        Err(tla_runtime::Error::Undefined("nosuch".into()))
     );
     assert!(
         registers
             .get(None, &Value::string("stats", 3))
             .unwrap_err()
+            .to_string()
             .starts_with("unsupported")
     );
 }
@@ -112,6 +115,7 @@ fn defaults_apply_only_to_absent_values_and_nonregister_keys() {
         registers
             .get_or_default(None, &Value::Int(-1), fallback.clone())
             .unwrap_err()
+            .to_string()
             .ends_with("length 10")
     );
     assert_eq!(
@@ -160,13 +164,14 @@ fn all_register_views_use_worker_zero_keys_and_preserve_named_ordinals() {
             registers
                 .get(None, key)
                 .unwrap_err()
+                .to_string()
                 .ends_with("was undefined.")
         );
     }
     registers.start(NonZeroUsize::new(3).unwrap()).unwrap();
     assert_eq!(
         registers.get(None, &indexed),
-        Value::function(vec![]).map_err(|e| e.to_string())
+        Ok(Value::function(vec![]).unwrap())
     );
     let name = Value::string("s:count", 42);
     for worker in 0..3 {
@@ -198,7 +203,9 @@ fn all_register_views_use_worker_zero_keys_and_preserve_named_ordinals() {
         registers.set(Some(0), &key, Value::Bool(true)).unwrap();
         assert_eq!(
             registers.get(None, query),
-            Err("java.lang.NullPointerException".into())
+            Err(tla_runtime::Error::Tlc(
+                "java.lang.NullPointerException".into()
+            ))
         );
     }
 }
@@ -223,7 +230,7 @@ fn caches_preserve_setup_isolate_sites_and_retry_failed_computations() {
             || {
                 count.set(count.get() + 1);
                 if fail {
-                    Err("failure".into())
+                    Err(tla_library::Error("failure".into()))
                 } else {
                     Ok(Value::Int(count.get()))
                 }
@@ -235,7 +242,12 @@ fn caches_preserve_setup_isolate_sites_and_retry_failed_computations() {
     assert_eq!(evaluate(&caches, 1, 1, false), Ok(Value::Int(1)));
     assert_eq!(evaluate(&caches, 1, 1, false), Ok(Value::Int(1)));
     assert_eq!(evaluate(&caches, 2, 1, false), Ok(Value::Int(2)));
-    assert_eq!(evaluate(&caches, 1, 2, true), Err("failure".into()));
+    assert_eq!(
+        evaluate(&caches, 1, 2, true),
+        Err(tla_runtime::Error::Evaluation(tla_library::Error(
+            "failure".into()
+        )))
+    );
     assert_eq!(evaluate(&caches, 1, 2, false), Ok(Value::Int(4)));
     caches = caches.checkpoint().unwrap();
     evaluate(&caches, 1, 3, false).unwrap();

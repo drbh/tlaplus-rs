@@ -42,7 +42,9 @@ pub enum Error {
     Evaluation(tla_model::Error),
     /// A reported counterexample does not replay on the model.
     InvalidCounterexample,
+    /// Instantiating or checking a temporal property failed.
     Liveness(tla_temporal::Error),
+    /// Disk-backed exploration failed to store or read a state.
     Storage(tla_disk::Error<tla_model::Error>),
 }
 
@@ -117,6 +119,9 @@ pub struct Loaded {
     config: Config,
     temporal: Temporal,
     lowered: Lowered,
+    /// How many operators the source module defines. Lowering numbers them
+    /// first, in source order, so `0..definitions` are the user definitions
+    /// whose constant bodies are cached before exploration.
     definitions: usize,
 }
 
@@ -230,6 +235,71 @@ fn resolve(
     Ok(op.body)
 }
 
+/// A configured expression may not exceed `max`: a state predicate cannot
+/// mention primed variables, an action cannot be temporal.
+fn require_level(model: &BoundModel, id: ExprId, max: Level, what: &str) -> Result<(), Error> {
+    if model.program.nodes[id].level > max {
+        let level = match max {
+            Level::Constant => "constant",
+            Level::State => "state",
+            Level::Action => "action",
+            Level::Temporal => "temporal",
+        };
+        return Err(configuration(format!("{what} must have {level} level")));
+    }
+    Ok(())
+}
+
+/// `SYMMETRY`: a constant set of permutations of model values, each kept as
+/// its entries.
+fn configure_symmetry(model: &mut BoundModel, id: ExprId) -> Result<(), Error> {
+    require_level(model, id, Level::Constant, "SYMMETRY")?;
+    let permutations = model.evaluate(id, &[], &[])?;
+    for permutation in permutations.elements().map_err(tla_model::Error::from)? {
+        let entries = permutation
+            .entries()
+            .map_err(tla_model::Error::from)?
+            .to_vec();
+        let domain = entries.iter().map(|(key, _)| key).collect::<Vec<_>>();
+        if domain.iter().any(|key| !matches!(key, Value::Model(_)))
+            || !domain
+                .iter()
+                .all(|key| entries.iter().any(|(_, value)| value == *key))
+        {
+            return Err(configuration(
+                "SYMMETRY requires permutations of model values",
+            ));
+        }
+        model.checks.symmetry.push(entries);
+    }
+    Ok(())
+}
+
+/// A `PROPERTY` conjunct TLC checks on initial states must be a state
+/// predicate. `temporal::prepare` already split off the action and temporal
+/// conjuncts; one still here is unsupported.
+fn classify_properties(
+    model: &mut BoundModel,
+    properties: Vec<(String, ExprId)>,
+) -> Result<(), Error> {
+    for (name, id) in properties {
+        match model.program.nodes[id].level {
+            Level::Constant | Level::State => model.checks.initial_properties.push((name, id)),
+            Level::Action => {
+                return Err(configuration(format!(
+                    "PROPERTY {name} has action level; use [][Action]_vars"
+                )));
+            }
+            Level::Temporal => {
+                return Err(configuration(format!(
+                    "PROPERTY {name} is not a supported formula"
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Binds constants, resolves the configured operators and checks their levels.
 pub fn bind(loaded: Loaded, settings: Settings) -> Result<Bound, Error> {
     let Loaded {
@@ -271,20 +341,16 @@ pub fn bind(loaded: Loaded, settings: Settings) -> Result<Bound, Error> {
             .as_deref()
             .ok_or_else(|| configuration("configuration requires INIT"))?,
     )?;
-    if model.program.nodes[init].level > Level::State {
-        return Err(configuration("INIT must have state level"));
-    }
+    require_level(&model, init, Level::State, "INIT")?;
     let next = config
         .next
         .as_deref()
         .ok_or_else(|| configuration("configuration requires NEXT"))?;
     let action = resolve(next)?;
-    if model.program.nodes[action].level > Level::Action {
-        return Err(configuration("NEXT must have action level"));
-    }
+    require_level(&model, action, Level::Action, "NEXT")?;
     let mut invariants = listed(&config.invariants)?;
     invariants.extend(named(&temporal.invariants)?);
-    let properties = named(&temporal.initial_properties)?;
+    let initial_properties = named(&temporal.initial_properties)?;
     let action_properties = named(&temporal.action_properties)?;
     let state_constraints = config
         .constraints
@@ -301,32 +367,10 @@ pub fn bind(loaded: Loaded, settings: Settings) -> Result<Bound, Error> {
     let possible = listed(&config.possible)?;
     let symmetry = config.symmetry.as_deref().map(resolve).transpose()?;
     if let Some(id) = symmetry {
-        if model.program.nodes[id].level != Level::Constant {
-            return Err(configuration("SYMMETRY must have constant level"));
-        }
-        let permutations = model.evaluate(id, &[], &[])?;
-        for permutation in permutations.elements().map_err(tla_model::Error::from)? {
-            let entries = permutation
-                .entries()
-                .map_err(tla_model::Error::from)?
-                .to_vec();
-            let domain = entries.iter().map(|(key, _)| key).collect::<Vec<_>>();
-            if domain.iter().any(|key| !matches!(key, Value::Model(_)))
-                || !domain
-                    .iter()
-                    .all(|key| entries.iter().any(|(_, value)| value == *key))
-            {
-                return Err(configuration(
-                    "SYMMETRY requires permutations of model values",
-                ));
-            }
-            model.checks.symmetry.push(entries);
-        }
+        configure_symmetry(&mut model, id)?;
     }
     for (_, id) in &invariants {
-        if model.program.nodes[*id].level > Level::State {
-            return Err(configuration("INVARIANT must have state level"));
-        }
+        require_level(&model, *id, Level::State, "INVARIANT")?;
     }
     // Like TLC, a constant invariant is checked once: dropped if TRUE, fatal if not.
     for (name, id) in &invariants {
@@ -340,12 +384,10 @@ pub fn bind(loaded: Loaded, settings: Settings) -> Result<Bound, Error> {
     }
     invariants.retain(|(_, id)| model.program.nodes[*id].level != Level::Constant);
     for id in &state_constraints {
-        if model.program.nodes[*id].level > Level::State {
-            return Err(configuration("CONSTRAINT must have state level"));
-        }
+        require_level(&model, *id, Level::State, "CONSTRAINT")?;
     }
-    if view.is_some_and(|id| model.program.nodes[id].level > Level::State) {
-        return Err(configuration("VIEW must have state level"));
+    if let Some(id) = view {
+        require_level(&model, id, Level::State, "VIEW")?;
     }
     model.checks.init = vec![init];
     model.checks.actions = actions::split(&mut model.program, next, action);
@@ -354,21 +396,7 @@ pub fn bind(loaded: Loaded, settings: Settings) -> Result<Bound, Error> {
     model.checks.state_constraints = state_constraints;
     model.checks.action_constraints = action_constraints;
     model.checks.view = view;
-    for (name, id) in properties {
-        match model.program.nodes[id].level {
-            Level::Constant | Level::State => model.checks.initial_properties.push((name, id)),
-            Level::Action => {
-                return Err(configuration(format!(
-                    "PROPERTY {name} has action level; use [][Action]_vars"
-                )));
-            }
-            Level::Temporal => {
-                return Err(configuration(format!(
-                    "PROPERTY {name} is not a supported formula"
-                )));
-            }
-        }
-    }
+    classify_properties(&mut model, initial_properties)?;
     let live = tla_temporal::instantiate(&mut model, &temporal)?;
     model.checks.check_deadlock = settings.check_deadlock && config.check_deadlock.unwrap_or(true);
     Ok(Bound::Ready(Box::new(Checker {
@@ -380,6 +408,7 @@ pub fn bind(loaded: Loaded, settings: Settings) -> Result<Bound, Error> {
     })))
 }
 
+/// How much of the state graph exploration covered.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Statistics {
     pub initial: usize,
@@ -428,17 +457,9 @@ impl Checker {
             return self.run_on_disk(disk, &options, timeline);
         }
         let workers = self.settings.workers;
-        let report = if let Some(timeline) = timeline {
-            let measured = timeline.measured(&self.model);
-            if workers.get() == 1 {
-                explore(&measured, &options)
-            } else {
-                explore_parallel(&measured, &options, workers)
-            }
-        } else if workers.get() == 1 {
-            explore(&self.model, &options)
-        } else {
-            explore_parallel(&self.model, &options, workers)
+        let report = match timeline {
+            Some(timeline) => explore_with(&timeline.measured(&self.model), &options, workers),
+            None => explore_with(&self.model, &options, workers),
         }?;
         let statistics = Statistics {
             initial: report.statistics.initial_distinct,
@@ -562,5 +583,24 @@ impl Checker {
             return Err(Error::InvalidCounterexample);
         }
         Ok(())
+    }
+}
+
+/// Serial or parallel exploration, by worker count.
+fn explore_with<T>(
+    system: &T,
+    options: &Options,
+    workers: NonZeroUsize,
+) -> Result<tla_engine::Report<T::State>, T::Error>
+where
+    T: tla_engine::TransitionSystem + Sync,
+    T::State: Send + Sync,
+    T::Error: Send,
+    T::Key: Send,
+{
+    if workers.get() == 1 {
+        explore(system, options)
+    } else {
+        explore_parallel(system, options, workers)
     }
 }

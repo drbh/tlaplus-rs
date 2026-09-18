@@ -1,3 +1,7 @@
+//! The TLA+ surface syntax: tokens, the expression and module trees, and a
+//! hand-written parser for the subset the checker understands. Everything
+//! downstream consumes [`Module`] and [`Expr`]; nothing here knows about
+//! values or evaluation.
 mod lexer;
 mod parser;
 

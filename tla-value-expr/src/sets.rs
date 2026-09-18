@@ -1,5 +1,5 @@
 use crate::{Error, Expr, FunctionKind, InfiniteSet, SetOp, Value};
-use tla_values::SetExpr;
+use tla_values::{Atom, SetExpr};
 
 impl Expr {
     pub fn subset_of(&self, other: &Self, limit: usize) -> Result<bool, Error> {
@@ -184,6 +184,146 @@ impl Expr {
             _ => Err(Error::Type("set")),
         }
     }
+    /// `SUBSET S`, or the subsets of `S` of one size.
+    fn enumerate_subsets(base: &Self, size: Option<i32>, limit: usize) -> Result<Vec<Self>, Error> {
+        Ok({
+            if size.is_some_and(|k| k < 0) {
+                return Ok(vec![]);
+            }
+            if matches!(base, Self::Infinite(_)) {
+                base.size()?;
+            }
+            let base = base.sorted(limit)?;
+            if let Some(k) = size
+                && (k < 0 || k as usize > base.len())
+            {
+                return Ok(vec![]);
+            }
+            let indices = Value::set((0..base.len()).map(|i| Value::Int(i as i32)).collect())?;
+            let subsets = SetExpr::subsets(&indices)?;
+            if subsets.cardinality()? > limit {
+                return Err(Error::Limit);
+            }
+            let mut result = Vec::new();
+            for subset in subsets.iter()? {
+                let indices = subset.elements()?;
+                if size.is_none_or(|k| indices.len() == k as usize) {
+                    result.push(Self::Set(
+                        indices
+                            .iter()
+                            .map(|i| base[i.integer().unwrap() as usize].clone())
+                            .collect(),
+                    ));
+                }
+            }
+            result
+        })
+    }
+
+    /// `[D -> R]`: every function from the domain into the range.
+    fn enumerate_functions(domain: &Self, range: &Self, limit: usize) -> Result<Vec<Self>, Error> {
+        Ok({
+            if !domain.empty()? && range.empty()? {
+                return Ok(vec![]);
+            }
+            domain.require_enumerable(|value| Error::FunctionEnumeration {
+                position: "domain D",
+                value,
+            })?;
+            let domain = domain.sorted(limit)?;
+            if domain.is_empty() {
+                return Ok(vec![Self::Function {
+                    kind: FunctionKind::Explicit,
+                    entries: vec![],
+                }]);
+            }
+            range.require_enumerable(|value| Error::FunctionEnumeration {
+                position: "range R",
+                value,
+            })?;
+            let values = range.sorted(limit)?;
+            let domains = domain.iter().map(|_| values.clone()).collect::<Vec<_>>();
+            combinations(&domains, limit)?
+                .into_iter()
+                .map(|values| {
+                    Ok(Self::Function {
+                        kind: FunctionKind::Explicit,
+                        entries: domain
+                            .iter()
+                            .zip(values)
+                            .map(|(k, v)| Ok((k.normalize(limit)?, v)))
+                            .collect::<Result<_, Error>>()?,
+                    })
+                })
+                .collect::<Result<_, Error>>()?
+        })
+    }
+
+    /// `S1 \\X S2 \\X ...`.
+    fn enumerate_product(&self, sets: &[Self], limit: usize) -> Result<Vec<Self>, Error> {
+        Ok({
+            if self.empty()? {
+                return Ok(vec![]);
+            }
+            let mut domains = Vec::new();
+            for (index, set) in sets.iter().enumerate() {
+                set.require_enumerable(|value| Error::ProductEnumeration { index, value })?;
+                let domain = set.sorted(limit)?;
+                if domain.is_empty() {
+                    return Ok(vec![]);
+                }
+                domains.push(domain);
+            }
+            combinations(&domains, limit)?
+                .into_iter()
+                .map(Self::tuple)
+                .collect()
+        })
+    }
+
+    /// `[f1 : S1, ...]`: every record over the field sets.
+    fn enumerate_records(fields: &[(Atom, Self)], limit: usize) -> Result<Vec<Self>, Error> {
+        Ok({
+            let mut fields: Vec<_> = fields.iter().collect();
+            fields.sort_by_key(|(name, _)| name.ordinal);
+            if fields
+                .iter()
+                .enumerate()
+                .any(|(i, (name, _))| fields[..i].iter().any(|(n, _)| n == name))
+            {
+                return Err(Error::DuplicateDomain);
+            }
+            for (_, set) in &fields {
+                if set.empty()? {
+                    return Ok(vec![]);
+                }
+            }
+            let mut domains = Vec::new();
+            for (name, set) in &fields {
+                set.require_enumerable(|value| Error::RecordEnumeration {
+                    field: name.text.to_string(),
+                    value,
+                })?;
+                let domain = set.sorted(limit)?;
+                if domain.is_empty() {
+                    return Ok(vec![]);
+                }
+                domains.push(domain);
+            }
+            combinations(&domains, limit)?
+                .into_iter()
+                .map(|values| Self::Function {
+                    kind: FunctionKind::Record,
+                    entries: fields
+                        .iter()
+                        .map(|(n, _)| Value::String(n.clone()))
+                        .zip(values)
+                        .collect(),
+                })
+                .collect()
+        })
+    }
+
     pub fn enumerate(&self, limit: usize) -> Result<Vec<Self>, Error> {
         let values = match self {
             Self::Canonical(value) => value.elements()?.iter().cloned().map(Self::atom).collect(),
@@ -225,130 +365,10 @@ impl Expr {
                 }
                 result
             }
-            Self::Subsets { base, size } => {
-                if size.is_some_and(|k| k < 0) {
-                    return Ok(vec![]);
-                }
-                if matches!(base.as_ref(), Self::Infinite(_)) {
-                    base.size()?;
-                }
-                let base = base.sorted(limit)?;
-                if let Some(k) = size
-                    && (*k < 0 || *k as usize > base.len())
-                {
-                    return Ok(vec![]);
-                }
-                let indices = Value::set((0..base.len()).map(|i| Value::Int(i as i32)).collect())?;
-                let subsets = SetExpr::subsets(&indices)?;
-                if subsets.cardinality()? > limit {
-                    return Err(Error::Limit);
-                }
-                let mut result = Vec::new();
-                for subset in subsets.iter()? {
-                    let indices = subset.elements()?;
-                    if size.is_none_or(|k| indices.len() == k as usize) {
-                        result.push(Self::Set(
-                            indices
-                                .iter()
-                                .map(|i| base[i.integer().unwrap() as usize].clone())
-                                .collect(),
-                        ));
-                    }
-                }
-                result
-            }
-            Self::Functions { domain, range } => {
-                if !domain.empty()? && range.empty()? {
-                    return Ok(vec![]);
-                }
-                domain.require_enumerable(|value| Error::FunctionEnumeration {
-                    position: "domain D",
-                    value,
-                })?;
-                let domain = domain.sorted(limit)?;
-                if domain.is_empty() {
-                    return Ok(vec![Self::Function {
-                        kind: FunctionKind::Explicit,
-                        entries: vec![],
-                    }]);
-                }
-                range.require_enumerable(|value| Error::FunctionEnumeration {
-                    position: "range R",
-                    value,
-                })?;
-                let values = range.sorted(limit)?;
-                let domains = domain.iter().map(|_| values.clone()).collect::<Vec<_>>();
-                combinations(&domains, limit)?
-                    .into_iter()
-                    .map(|values| {
-                        Ok(Self::Function {
-                            kind: FunctionKind::Explicit,
-                            entries: domain
-                                .iter()
-                                .zip(values)
-                                .map(|(k, v)| Ok((k.normalize(limit)?, v)))
-                                .collect::<Result<_, Error>>()?,
-                        })
-                    })
-                    .collect::<Result<_, Error>>()?
-            }
-            Self::Product(sets) => {
-                if self.empty()? {
-                    return Ok(vec![]);
-                }
-                let mut domains = Vec::new();
-                for (index, set) in sets.iter().enumerate() {
-                    set.require_enumerable(|value| Error::ProductEnumeration { index, value })?;
-                    let domain = set.sorted(limit)?;
-                    if domain.is_empty() {
-                        return Ok(vec![]);
-                    }
-                    domains.push(domain);
-                }
-                combinations(&domains, limit)?
-                    .into_iter()
-                    .map(Self::tuple)
-                    .collect()
-            }
-            Self::Records(fields) => {
-                let mut fields: Vec<_> = fields.iter().collect();
-                fields.sort_by_key(|(name, _)| name.ordinal);
-                if fields
-                    .iter()
-                    .enumerate()
-                    .any(|(i, (name, _))| fields[..i].iter().any(|(n, _)| n == name))
-                {
-                    return Err(Error::DuplicateDomain);
-                }
-                for (_, set) in &fields {
-                    if set.empty()? {
-                        return Ok(vec![]);
-                    }
-                }
-                let mut domains = Vec::new();
-                for (name, set) in &fields {
-                    set.require_enumerable(|value| Error::RecordEnumeration {
-                        field: name.text.to_string(),
-                        value,
-                    })?;
-                    let domain = set.sorted(limit)?;
-                    if domain.is_empty() {
-                        return Ok(vec![]);
-                    }
-                    domains.push(domain);
-                }
-                combinations(&domains, limit)?
-                    .into_iter()
-                    .map(|values| Self::Function {
-                        kind: FunctionKind::Record,
-                        entries: fields
-                            .iter()
-                            .map(|(n, _)| Value::String(n.clone()))
-                            .zip(values)
-                            .collect(),
-                    })
-                    .collect()
-            }
+            Self::Subsets { base, size } => Self::enumerate_subsets(base, *size, limit)?,
+            Self::Functions { domain, range } => Self::enumerate_functions(domain, range, limit)?,
+            Self::Product(sets) => self.enumerate_product(sets, limit)?,
+            Self::Records(fields) => Self::enumerate_records(fields, limit)?,
             Self::Union(base) => {
                 let mut values = Vec::new();
                 for set in base.enumerate(limit)? {

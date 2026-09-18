@@ -1,3 +1,7 @@
+//! Lowering a loaded module and its configuration to the IR of `tla-ir`:
+//! operators become numbered definitions, names resolve to slots, and every
+//! node is annotated with its level. [`lower`] produces a [`Lowered`] program
+//! with the constant bindings and assumptions the configuration selected.
 mod calls;
 mod expressions;
 use std::collections::BTreeMap;

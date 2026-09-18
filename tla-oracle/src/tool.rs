@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Answers, Mode, Outcome};
+use crate::{Answers, Error, Mode, Outcome};
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Message {
@@ -13,13 +13,13 @@ pub struct Message {
 
 /// Parse `-tool` framing, allowing ordinary SANY/Print output between messages.
 /// Damaged or truncated frames are errors, never silently discarded evidence.
-pub fn parse_stream(input: &str) -> Result<Vec<Message>, String> {
+pub fn parse_stream(input: &str) -> Result<Vec<Message>, Error> {
     let normalized = input.replace("\r\n", "\n");
     let mut messages = Vec::new();
     let mut current: Option<Message> = None;
     let mut embedded = Vec::new();
     for (line_index, line) in normalized.lines().enumerate() {
-        let error = |detail| format!("tool stream line {}: {detail}", line_index + 1);
+        let error = |detail| Error::Parse(format!("tool stream line {}: {detail}", line_index + 1));
         // Exceptions can quote another framed diagnostic, including an inline
         // `: STARTMSG`. Preserve that entire frame as the outer message's body.
         let header = if current.is_some() {
@@ -70,30 +70,33 @@ pub fn parse_stream(input: &str) -> Result<Vec<Message>, String> {
         }
     }
     if let Some(message) = current {
-        return Err(format!("unterminated tool message {}", message.code));
+        return Err(Error::Parse(format!(
+            "unterminated tool message {}",
+            message.code
+        )));
     }
     Ok(messages)
 }
 
-fn number(text: &str) -> Result<u64, String> {
+fn number(text: &str) -> Result<u64, Error> {
     let groups: Vec<_> = text.split(',').collect();
     if groups
         .iter()
         .any(|g| g.is_empty() || !g.bytes().all(|b| b.is_ascii_digit()))
         || (groups.len() > 1 && (groups[0].len() > 3 || groups[1..].iter().any(|g| g.len() != 3)))
     {
-        return Err(format!("invalid TLC count: {text:?}"));
+        return Err(Error::Parse(format!("invalid TLC count: {text:?}")));
     }
     groups
         .concat()
         .parse()
-        .map_err(|_| format!("TLC count overflows u64: {text}"))
+        .map_err(|_| Error::Parse(format!("TLC count overflows u64: {text}")))
 }
 
-fn between<'a>(text: &'a str, prefix: &str, suffix: &str) -> Result<&'a str, String> {
+fn between<'a>(text: &'a str, prefix: &str, suffix: &str) -> Result<&'a str, Error> {
     text.strip_prefix(prefix)
         .and_then(|s| s.split_once(suffix).map(|(value, _)| value))
-        .ok_or_else(|| format!("malformed TLC answer: {text:?}"))
+        .ok_or_else(|| Error::Parse(format!("malformed TLC answer: {text:?}")))
 }
 
 #[derive(Default)]
@@ -150,7 +153,7 @@ impl Extractor {
     }
 }
 
-pub fn extract_messages(messages: &[Message], exit_status: Option<i32>) -> Result<Answers, String> {
+pub fn extract_messages(messages: &[Message], exit_status: Option<i32>) -> Result<Answers, Error> {
     let mut extractor = Extractor::default();
     for message in messages {
         extractor.code(message.code);
@@ -169,14 +172,14 @@ pub fn extract_messages(messages: &[Message], exit_status: Option<i32>) -> Resul
             code::TLC_INIT_GENERATED2 | code::TLC_INIT_GENERATED4 => {
                 let (_, rest) = text
                     .split_once(" generated, with ")
-                    .ok_or_else(|| format!("malformed initial counts: {text:?}"))?;
+                    .ok_or_else(|| Error::Parse(format!("malformed initial counts: {text:?}")))?;
                 extractor.answers.initial_distinct =
                     Some(number(between(rest, "", " of them distinct")?)?);
             }
             code::TLC_STATS => {
                 let (_, rest) = text
                     .split_once(" states generated, ")
-                    .ok_or_else(|| format!("malformed final counts: {text:?}"))?;
+                    .ok_or_else(|| Error::Parse(format!("malformed final counts: {text:?}")))?;
                 extractor.answers.distinct =
                     Some(number(between(rest, "", " distinct states found,")?)?);
             }
@@ -198,7 +201,7 @@ pub fn extract_messages(messages: &[Message], exit_status: Option<i32>) -> Resul
 pub fn extract_records<'a>(
     records: impl IntoIterator<Item = (i32, &'a [String])>,
     exit_status: Option<i32>,
-) -> Result<Answers, String> {
+) -> Result<Answers, Error> {
     let mut extractor = Extractor::default();
     for (code, params) in records {
         extractor.code(code);
@@ -208,11 +211,9 @@ pub fn extract_records<'a>(
             code::TLC_INIT_GENERATED4 | code::TLC_STATS => 1,
             _ => continue,
         };
-        let value = number(
-            params
-                .get(index)
-                .ok_or_else(|| format!("missing parameter {index} for TLC message {code}"))?,
-        )?;
+        let value = number(params.get(index).ok_or_else(|| {
+            Error::Parse(format!("missing parameter {index} for TLC message {code}"))
+        })?)?;
         match code {
             code::TLC_SEARCH_DEPTH => extractor.answers.depth = Some(value),
             code::TLC_STATS => extractor.answers.distinct = Some(value),

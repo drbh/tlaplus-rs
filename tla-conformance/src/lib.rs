@@ -1,3 +1,6 @@
+//! Differential testing against TLC: bounded execution of specifications,
+//! recorded snapshots, and the request and report types the corpus runners in
+//! `examples/` share.
 pub mod snapshots;
 use std::collections::BTreeMap;
 use std::fs;

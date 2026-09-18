@@ -126,6 +126,8 @@ pub struct Operator {
 pub struct Program {
     pub sources: std::collections::BTreeMap<ExprId, String>,
     pub methods: std::collections::BTreeMap<ExprId, String>,
+    /// The polynomial for state fingerprints, when the configuration picks one;
+    /// otherwise [`DEFAULT_FINGERPRINT_POLYNOMIAL`].
     pub fingerprint_polynomial: Option<u64>,
     pub function_labels: std::collections::BTreeMap<ExprId, (String, String)>,
     pub strings: std::collections::BTreeMap<String, u32>,
@@ -367,6 +369,9 @@ impl Program {
         )
     }
 }
+
+/// TLC's first fingerprint polynomial, used when the configuration picks none.
+pub const DEFAULT_FINGERPRINT_POLYNOMIAL: u64 = 0x9114_98ae_0e66_bad6;
 
 #[cfg(test)]
 mod tests {

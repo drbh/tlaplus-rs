@@ -1,21 +1,23 @@
+//! The `oracle` command: extracts answer corpora from TLC recordings and
+//! compares two corpora.
 use std::path::Path;
 use std::process::ExitCode;
 
 use tla_oracle::corpus::{Corpus, compare_corpora};
 
-fn run() -> Result<bool, String> {
+fn run() -> Result<bool, Box<dyn std::error::Error>> {
     let args: Vec<_> = std::env::args().skip(1).collect();
     match args.as_slice() {
         [command, path] if command == "extract" => {
             let corpus = Corpus::read(Path::new(path))?;
-            println!("{}", serde_json::to_string_pretty(&corpus).map_err(|e| e.to_string())?);
+            println!("{}", serde_json::to_string_pretty(&corpus)?);
             Ok(true)
         }
         [command, expected, actual] if command == "compare" => {
             let expected = Corpus::read(Path::new(expected))?;
             let actual = Corpus::read(Path::new(actual))?;
             let report = compare_corpora(&expected, &actual);
-            println!("{}", serde_json::to_string_pretty(&report).map_err(|e| e.to_string())?);
+            println!("{}", serde_json::to_string_pretty(&report)?);
             Ok(report.is_match())
         }
         _ => Err("usage: oracle extract PATH | oracle compare EXPECTED ACTUAL\nPATH: JUnit manifest, Examples .json[.gz], recording directory, or extracted snapshot".into()),

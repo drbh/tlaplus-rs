@@ -221,6 +221,11 @@ fn runtime_inner(
         _ => Expr::atom(evaluator.eval(id, locals, depth + 1)?),
     })
 }
+/// The builtins the evaluator handles itself rather than through the
+/// standard library: TLC's side effects and registers first, then the
+/// comparisons and accessors that work on deferred sets and functions
+/// without materializing them. Returns `None` when `op` has no such form and
+/// must be applied to finite values instead.
 pub(crate) fn query(
     evaluator: &Evaluator<'_>,
     op: B,
@@ -231,33 +236,17 @@ pub(crate) fn query(
     let polynomial = evaluator
         .program
         .fingerprint_polynomial
-        .unwrap_or(0x9114_98ae_0e66_bad6);
+        .unwrap_or(tla_ir::DEFAULT_FINGERPRINT_POLYNOMIAL);
     if op == B::TlcEvalDefinition {
+        // The lowering replaces every well-formed use; one that survives has no definition.
         return Err(Error("invalid TLCEvalDefinition".into()));
     }
     if op == B::Memo {
-        let [body, closure, metadata] = args else {
-            return Err(Error("invalid TLCCache expression".into()));
-        };
-        match evaluator.program.nodes[*body].level {
-            tla_ir::Level::State => {
-                return Err(Error(
-                    "TLCCache of a state-level expression needs states (M4).".into(),
-                ));
-            }
-            tla_ir::Level::Constant => {}
-            _ => return evaluator.eval(*body, locals, depth + 1).map(Some),
-        }
-        let key = evaluator.eval(*closure, locals, depth + 1)?;
-        let metadata = evaluator.eval(*metadata, locals, depth + 1)?;
-        return evaluator
-            .cache
-            .evaluate(&metadata, key, polynomial, || {
-                evaluator.eval(*body, locals, depth + 1).map_err(|e| e.0)
-            })
-            .map(Some)
-            .map_err(Error);
+        return memoized(evaluator, args, locals, depth, polynomial).map(Some);
     }
+    // Operators whose operands are evaluated lazily so nested deferred forms
+    // survive until this point: `SUBSET` of a symbolic set, and `Print`,
+    // whose operand must not be forced early. The result is enumerated here.
     if matches!(op, B::PowerSet | B::Print | B::PrintT) {
         return Ok(Some(
             crate::functional::deferred_operator(evaluator, op, args, locals, depth)?
@@ -267,48 +256,14 @@ pub(crate) fn query(
     if let B::RandomElement | B::RandomSubset | B::RandomSetOfSubsets = op {
         return crate::functional::sample(evaluator, op, args, locals, depth).map(Some);
     }
-    if matches!(op, B::TlcSet | B::TlcGetOrDefault) {
-        let [key, value] = args else {
-            return Err(Error(format!("{op:?} expects two operands")));
-        };
-        let key = evaluator.eval(*key, locals, depth + 1)?;
-        let value = evaluator.eval(*value, locals, depth + 1)?;
-        let empty = crate::Registers::default();
-        let registers = evaluator.registers.unwrap_or(&empty);
-        return if op == B::TlcSet {
-            registers.set(evaluator.worker, &key, value)
-        } else {
-            registers.get_or_default(evaluator.worker, &key, value)
-        }
-        .map(Some)
-        .map_err(Error);
-    }
-    if op == B::TlcGet {
-        let [argument] = args else {
-            return Err(Error("TLCGet expects one operand".into()));
-        };
-        let value = evaluator.eval(*argument, locals, depth + 1)?;
-        return match value {
-            Value::String(name) if name.text.as_ref() == "duration" => Ok(Some(Value::Int(
-                evaluator.started.elapsed().as_secs() as i32,
-            ))),
-            Value::String(name) if name.text.as_ref() == "level" => i32::try_from(evaluator.level)
-                .map(Value::Int)
-                .map(Some)
-                .map_err(|e| Error(e.to_string())),
-            _ => evaluator
-                .registers
-                .unwrap_or(&crate::Registers::default())
-                .get(evaluator.worker, &value)
-                .map(Some)
-                .map_err(Error),
-        };
+    if matches!(op, B::TlcSet | B::TlcGetOrDefault | B::TlcGet) {
+        return tlc_registers(evaluator, op, args, locals, depth).map(Some);
     }
     if op == B::TlcFingerprint {
         let [argument] = args else {
             return Err(Error("TLCFP expects one operand".into()));
         };
-        let value = runtime(evaluator, *argument, locals, depth + 1)?.normalize(100_000)?;
+        let value = runtime(evaluator, *argument, locals, depth + 1)?.normalize(LIMIT)?;
         return Ok(Some(Value::Int(value.fingerprint(polynomial))));
     }
     if op == B::JsonSerialize {
@@ -321,6 +276,7 @@ pub(crate) fn query(
         ) {
             return Err(Error("JsonSerialize expects a filename string".into()));
         }
+        // The value is evaluated for its errors; the checker never writes the file.
         return runtime(evaluator, *value, locals, depth + 1).map(|_| Some(Value::Bool(true)));
     }
     if op == B::Enabled {
@@ -336,22 +292,7 @@ pub(crate) fn query(
         op,
         B::ToString | B::ToJson | B::ToJsonArray | B::ToJsonObject
     ) {
-        if args.len() != 1 {
-            return Err(Error("text conversion expects one operand".into()));
-        }
-        let text = if op == B::ToString {
-            render(evaluator, args[0], locals, depth + 1)?
-        } else {
-            tla_library::json(
-                &runtime(evaluator, args[0], locals, depth + 1)?,
-                match op {
-                    B::ToJsonArray => tla_library::JsonMode::Array,
-                    B::ToJsonObject => tla_library::JsonMode::Object,
-                    _ => tla_library::JsonMode::Value,
-                },
-            )?
-        };
-        return Ok(Some(evaluator.string(text)?));
+        return text_conversion(evaluator, op, args, locals, depth).map(Some);
     }
     if !matches!(
         op,
@@ -406,13 +347,10 @@ pub(crate) fn query(
             Value::Int(i32::try_from(a.cardinality()?).map_err(|e| Error(e.to_string()))?)
         }
         B::IsFiniteSet => Value::Bool(a.finite()?),
-        B::Domain => a.domain()?.normalize(LIMIT)?,
         _ => {
             let b = runtime(evaluator, args[1], locals, depth + 1)?;
             match op {
-                B::Apply => a.apply(&b)?.normalize(LIMIT)?,
                 B::Eq | B::Ne => Value::Bool(a.semantic_eq(&b)? == (op == B::Eq)),
-                B::In | B::NotIn => Value::Bool(b.contains(&a)? == (op == B::In)),
                 B::SubsetEq => Value::Bool(a.subset_of(&b, LIMIT)?),
                 _ => Value::Bool(tla_library::integer_comparison(op, &a, &b)?),
             }
@@ -420,6 +358,119 @@ pub(crate) fn query(
     };
     Ok(Some(result))
 }
+/// `TLCSet`, `TLCGet` and `TLCGetOrDefault` over the model's registers.
+/// Without a model (evaluating a constant expression on its own) the
+/// fallback registers have no workers: a named `TLCSet` is accepted and
+/// forgotten, an indexed one fails as inactive, and `TLCGet` answers only
+/// `duration` and `level` (handled here); `-D` keys echo themselves, the
+/// checker's statistics keys are unsupported, and everything else is
+/// undefined.
+fn tlc_registers(
+    evaluator: &Evaluator<'_>,
+    op: B,
+    args: &[ExprId],
+    locals: &mut Vec<Option<Value>>,
+    depth: usize,
+) -> Result<Value, Error> {
+    let empty = crate::Registers::default();
+    let registers = evaluator.registers.unwrap_or(&empty);
+    if matches!(op, B::TlcSet | B::TlcGetOrDefault) {
+        let [key, value] = args else {
+            return Err(Error(format!("{op:?} expects two operands")));
+        };
+        let key = evaluator.eval(*key, locals, depth + 1)?;
+        let value = evaluator.eval(*value, locals, depth + 1)?;
+        return if op == B::TlcSet {
+            registers.set(evaluator.worker, &key, value)
+        } else {
+            registers.get_or_default(evaluator.worker, &key, value)
+        }
+        .map_err(Error::from);
+    }
+    // `TLCGet` also answers the run-time keys the checker keeps itself.
+    if op == B::TlcGet {
+        let [argument] = args else {
+            return Err(Error("TLCGet expects one operand".into()));
+        };
+        let value = evaluator.eval(*argument, locals, depth + 1)?;
+        return match value {
+            Value::String(name) if name.text.as_ref() == "duration" => {
+                Ok(Value::Int(evaluator.started.elapsed().as_secs() as i32))
+            }
+            Value::String(name) if name.text.as_ref() == "level" => i32::try_from(evaluator.level)
+                .map(Value::Int)
+                .map_err(|e| Error(e.to_string())),
+            _ => registers.get(evaluator.worker, &value).map_err(Error::from),
+        };
+    }
+    Err(Error(format!("{op:?} is not a register operator")))
+}
+
+/// `TLCCache(body, closure, metadata)`, lowered as `Memo`: a constant body
+/// is cached by the values its closure captured. `metadata` is the
+/// `<<site, seed>>` pair the lowering attaches, `seed` being the site's
+/// initial entries, so entries are kept per call site and keyed by the
+/// closure within it. `polynomial` is the fingerprint polynomial the cache
+/// hashes keys with.
+fn memoized(
+    evaluator: &Evaluator<'_>,
+    args: &[ExprId],
+    locals: &mut Vec<Option<Value>>,
+    depth: usize,
+    polynomial: u64,
+) -> Result<Value, Error> {
+    let [body, closure, metadata] = args else {
+        return Err(Error("invalid TLCCache expression".into()));
+    };
+    // TLC caches state-level bodies per state, which this cache cannot
+    // express, so they are rejected rather than silently miscached; TLC never
+    // caches action or temporal bodies, so those are simply evaluated.
+    match evaluator.program.nodes[*body].level {
+        tla_ir::Level::State => {
+            return Err(Error(
+                "TLCCache of a state-level expression is not supported".into(),
+            ));
+        }
+        tla_ir::Level::Constant => {}
+        _ => return evaluator.eval(*body, locals, depth + 1),
+    }
+    // Within a site the cache keys on the closure alone.
+    let key = evaluator.eval(*closure, locals, depth + 1)?;
+    let metadata = evaluator.eval(*metadata, locals, depth + 1)?;
+    evaluator
+        .cache
+        .evaluate(&metadata, key, polynomial, || {
+            evaluator.eval(*body, locals, depth + 1)
+        })
+        .map_err(Error::from)
+}
+
+/// `ToString` and the `Json` module's renderings of a value.
+fn text_conversion(
+    evaluator: &Evaluator<'_>,
+    op: B,
+    args: &[ExprId],
+    locals: &mut Vec<Option<Value>>,
+    depth: usize,
+) -> Result<Value, Error> {
+    if args.len() != 1 {
+        return Err(Error("text conversion expects one operand".into()));
+    }
+    let text = if op == B::ToString {
+        render(evaluator, args[0], locals, depth + 1)?
+    } else {
+        tla_library::json(
+            &runtime(evaluator, args[0], locals, depth + 1)?,
+            match op {
+                B::ToJsonArray => tla_library::JsonMode::Array,
+                B::ToJsonObject => tla_library::JsonMode::Object,
+                _ => tla_library::JsonMode::Value,
+            },
+        )?
+    };
+    evaluator.string(text)
+}
+
 fn render(
     evaluator: &Evaluator<'_>,
     id: ExprId,
@@ -474,13 +525,26 @@ fn render(
                     Err(_error) => {
                         let Some((parameter, body)) = evaluator.program.function_labels.get(&id)
                         else {
-                            #[rustfmt::skip]
-                            let domain = domain.and_then(|id| match &evaluator.program.nodes[id].expr { Ir::Apply { op: B::Naturals, args } if args.is_empty() => Some("Nat"), Ir::Apply { op: B::Integers, args } if args.is_empty() => Some("Int"), Ir::Apply { op: B::Strings, args } if args.is_empty() => Some("STRING"), _ => None }).unwrap_or("\\universe");
-                            #[rustfmt::skip]
-                            return Ok(format!("[x \\in {domain} |-> <expression {}>]", evaluator.program.source(*body).unwrap_or("unknown")));
+                            let domain = domain
+                                .and_then(|id| builtin_set_name(evaluator.program, id))
+                                .unwrap_or("\\universe");
+                            return Ok(format!(
+                                "[x \\in {domain} |-> <expression {}>]",
+                                evaluator.program.source(*body).unwrap_or("unknown")
+                            ));
                         };
-                        #[rustfmt::skip]
-                        let domain = match domain { Some(domain) => match &evaluator.program.nodes[*domain].expr { Ir::Apply { op: B::Naturals, args } if args.is_empty() => "Nat".into(), Ir::Apply { op: B::Integers, args } if args.is_empty() => "Int".into(), Ir::Apply { op: B::Strings, args } if args.is_empty() => "STRING".into(), _ => tla_library::stringify(&runtime(evaluator, *domain, locals, depth + 1)?)? }, None => "\\universe".into() };
+                        let domain = match domain {
+                            Some(domain) => match builtin_set_name(evaluator.program, *domain) {
+                                Some(name) => name.into(),
+                                None => tla_library::stringify(&runtime(
+                                    evaluator,
+                                    *domain,
+                                    locals,
+                                    depth + 1,
+                                )?)?,
+                            },
+                            None => "\\universe".into(),
+                        };
                         Ok(format!(
                             "[{parameter} \\in {domain} |-> <expression {body}>]"
                         ))
@@ -495,4 +559,23 @@ fn render(
             )?)?),
         }
     })
+}
+
+/// The name of a built-in infinite set, for messages that cannot enumerate it.
+fn builtin_set_name(program: &tla_ir::Program, id: ExprId) -> Option<&'static str> {
+    match &program.nodes[id].expr {
+        Ir::Apply {
+            op: B::Naturals,
+            args,
+        } if args.is_empty() => Some("Nat"),
+        Ir::Apply {
+            op: B::Integers,
+            args,
+        } if args.is_empty() => Some("Int"),
+        Ir::Apply {
+            op: B::Strings,
+            args,
+        } if args.is_empty() => Some("STRING"),
+        _ => None,
+    }
 }

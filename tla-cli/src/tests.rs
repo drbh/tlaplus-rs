@@ -2,7 +2,7 @@ use super::*;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 static NEXT: AtomicUsize = AtomicUsize::new(0);
-fn check(body: &str, cfg: &str, flags: &[&str]) -> Result<i32, String> {
+fn check(body: &str, cfg: &str, flags: &[&str]) -> Result<i32, Error> {
     let dir = std::env::temp_dir().join(format!(
         "rewrite-cli-{}-{}",
         std::process::id(),

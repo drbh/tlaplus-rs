@@ -1,3 +1,6 @@
+//! What a TLC run answers and how two runs are compared: outcomes,
+//! statistics, property verdicts and counterexamples, and the corpus format
+//! differential tests read.
 pub mod corpus;
 pub mod tool;
 
@@ -189,33 +192,73 @@ pub struct Counterexample {
     pub end: TraceEnd,
 }
 
+/// Why TLC output or a recorded corpus could not be used.
+#[derive(Debug)]
+pub enum Error {
+    /// A framed TLC message stream or answer text was malformed.
+    Parse(String),
+    /// A corpus file or manifest was inconsistent.
+    Corpus(String),
+    Io(std::io::Error),
+    Json(serde_json::Error),
+    /// A counterexample's numbering or loop markers are inconsistent.
+    Structure(String),
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Parse(e) | Self::Corpus(e) | Self::Structure(e) => f.write_str(e),
+            Self::Io(e) => e.fmt(f),
+            Self::Json(e) => e.fmt(f),
+        }
+    }
+}
+
+impl std::error::Error for Error {}
+
+impl From<std::io::Error> for Error {
+    fn from(e: std::io::Error) -> Self {
+        Self::Io(e)
+    }
+}
+
+impl From<serde_json::Error> for Error {
+    fn from(e: serde_json::Error) -> Self {
+        Self::Json(e)
+    }
+}
+
 impl Counterexample {
     /// Check numbering and loop references only. Transition/property validity
     /// requires the evaluator and typed states; liveness also requires fairness.
-    pub fn check_structure(&self) -> Result<(), String> {
+    pub fn check_structure(&self) -> Result<(), Error> {
         if self.states.is_empty() {
-            return Err("counterexample has no states".into());
+            return Err(Error::Structure("counterexample has no states".into()));
         }
         for (index, state) in self.states.iter().enumerate() {
             if state.ordinal != index as i64 + 1 {
-                return Err(format!(
+                return Err(Error::Structure(format!(
                     "expected state {}, found {}",
                     index + 1,
                     state.ordinal
-                ));
+                )));
             }
             if state.display.trim().is_empty() || state.display.starts_with("<unstringifiable ") {
-                return Err(format!("state {} has no usable display", state.ordinal));
+                return Err(Error::Structure(format!(
+                    "state {} has no usable display",
+                    state.ordinal
+                )));
             }
         }
         let count = self.states.len() as i64;
         match self.end {
-            TraceEnd::Stuttering { ordinal } if ordinal != count + 1 => {
-                Err("stuttering marker must follow the last state".into())
-            }
-            TraceEnd::BackTo { ordinal } if !(1..=count).contains(&ordinal) => {
-                Err("back-to-state marker points outside the trace".into())
-            }
+            TraceEnd::Stuttering { ordinal } if ordinal != count + 1 => Err(Error::Structure(
+                "stuttering marker must follow the last state".into(),
+            )),
+            TraceEnd::BackTo { ordinal } if !(1..=count).contains(&ordinal) => Err(
+                Error::Structure("back-to-state marker points outside the trace".into()),
+            ),
             _ => Ok(()),
         }
     }

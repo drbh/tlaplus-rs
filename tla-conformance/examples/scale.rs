@@ -1,5 +1,5 @@
 use std::{convert::Infallible, hint::black_box, num::NonZeroUsize, sync::Arc, time::Instant};
-use tla_disk::Codec;
+use tla_disk::{Codec, CodecError};
 use tla_engine::{Options, Transition, TransitionSystem};
 
 #[derive(Clone)]
@@ -53,18 +53,18 @@ impl TransitionSystem for Model {
 }
 struct Encoding;
 impl Codec<State, usize> for Encoding {
-    fn state(&self, state: &State) -> Result<Vec<u8>, String> {
+    fn state(&self, state: &State) -> Result<Vec<u8>, CodecError> {
         let mut bytes = state.id.to_le_bytes().to_vec();
         bytes.extend(state.payload.iter());
         Ok(bytes)
     }
-    fn key(&self, key: &usize) -> Result<Vec<u8>, String> {
+    fn key(&self, key: &usize) -> Result<Vec<u8>, CodecError> {
         Ok(key.to_le_bytes().to_vec())
     }
-    fn decode(&self, bytes: &[u8]) -> Result<State, String> {
+    fn decode(&self, bytes: &[u8]) -> Result<State, CodecError> {
         let width = std::mem::size_of::<usize>();
         if bytes.len() < width {
-            return Err("truncated state".into());
+            return Err(CodecError::Truncated);
         }
         Ok(State {
             id: usize::from_le_bytes(bytes[..width].try_into().unwrap()),

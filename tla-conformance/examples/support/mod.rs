@@ -25,7 +25,7 @@ pub fn write_json(
 pub fn replay(model: &BoundModel, samples: &Samples) -> Result<bool, String> {
     use tla_engine::TransitionSystem;
     for (bytes, expected) in samples {
-        let state = StateCodec.decode(bytes)?;
+        let state = StateCodec.decode(bytes).map_err(|e| e.to_string())?;
         let actual = model
             .successors(&state)
             .map_err(|e| e.to_string())?

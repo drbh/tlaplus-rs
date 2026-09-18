@@ -1,3 +1,7 @@
+//! Graph exploration over any [`TransitionSystem`]: breadth-first search for
+//! reachable states, serial or parallel, checking invariants and properties as
+//! states are generated and reporting the first violations with their traces.
+//! The engine knows nothing about TLA+.
 mod parallel;
 mod serial;
 

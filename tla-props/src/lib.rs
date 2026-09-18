@@ -1,3 +1,6 @@
+//! Temporal properties over behavior graphs: a [`Formula`] in positive normal
+//! form and a [`check`] that searches the product of a graph and the formula
+//! for an accepting lasso.
 mod formula;
 mod search;
 
@@ -20,15 +23,41 @@ pub struct Graph {
     pub edges: Vec<Edge>,
 }
 
+/// Why a graph or lasso could not be checked.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Error {
+    /// The graph refers to states it does not have.
+    InvalidGraph(&'static str),
+    /// A lasso is not a path through the graph.
+    InvalidLasso(&'static str),
+    /// The search produced a lasso that does not satisfy the formula.
+    UnverifiedLasso,
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidGraph(what) | Self::InvalidLasso(what) => f.write_str(what),
+            Self::UnverifiedLasso => {
+                f.write_str("constructed lasso failed independent temporal validation")
+            }
+        }
+    }
+}
+
+impl std::error::Error for Error {}
+
 impl Graph {
-    pub fn validate(&self) -> Result<(), String> {
+    pub fn validate(&self) -> Result<(), Error> {
         if self.initial.iter().any(|&i| i >= self.nodes)
             || self
                 .edges
                 .iter()
                 .any(|e| e.from >= self.nodes || e.to >= self.nodes)
         {
-            return Err("liveness graph references a missing state".into());
+            return Err(Error::InvalidGraph(
+                "liveness graph references a missing state",
+            ));
         }
         Ok(())
     }
@@ -42,32 +71,40 @@ pub struct Lasso {
 }
 
 impl Lasso {
-    pub fn satisfies(&self, graph: &Graph, formula: &Formula) -> Result<bool, String> {
+    pub fn satisfies(&self, graph: &Graph, formula: &Formula) -> Result<bool, Error> {
         graph.validate()?;
         if self.cycle.is_empty() || !graph.initial.contains(&self.initial) {
-            return Err("lasso needs an initial state and a nonempty cycle".into());
+            return Err(Error::InvalidLasso(
+                "lasso needs an initial state and a nonempty cycle",
+            ));
         }
         let mut state = self.initial;
         let mut labels = Vec::new();
         for &id in &self.prefix {
-            let edge = graph.edges.get(id).ok_or("missing prefix edge")?;
+            let edge = graph
+                .edges
+                .get(id)
+                .ok_or(Error::InvalidLasso("missing prefix edge"))?;
             if edge.from != state {
-                return Err("disconnected prefix".into());
+                return Err(Error::InvalidLasso("disconnected prefix"));
             }
             state = edge.to;
             labels.push(&edge.atoms);
         }
         let cycle_start = state;
         for &id in &self.cycle {
-            let edge = graph.edges.get(id).ok_or("missing cycle edge")?;
+            let edge = graph
+                .edges
+                .get(id)
+                .ok_or(Error::InvalidLasso("missing cycle edge"))?;
             if edge.from != state {
-                return Err("disconnected cycle".into());
+                return Err(Error::InvalidLasso("disconnected cycle"));
             }
             state = edge.to;
             labels.push(&edge.atoms);
         }
         if state != cycle_start {
-            return Err("cycle does not close".into());
+            return Err(Error::InvalidLasso("cycle does not close"));
         }
         Ok(evaluate(formula, &labels, self.prefix.len())[0])
     }

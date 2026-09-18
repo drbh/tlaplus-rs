@@ -1,15 +1,53 @@
 use tla_bridge::values::intern_value;
 use tla_values::{Error, SetExpr, Value};
 
-pub fn enumeration(text: &str) -> Result<std::collections::HashSet<Value>, String> {
+/// Why a recorded enumeration could not be read.
+#[derive(Debug)]
+pub enum ParseError {
+    Escape(String),
+    Expected {
+        token: String,
+        at: String,
+    },
+    Trailing(String),
+    Unterminated(&'static str),
+    Number(&'static str),
+    Value(Error),
+    /// The faithful port rejected a value.
+    Faithful(String),
+    Json(serde_json::Error),
+}
+
+impl std::fmt::Display for ParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Escape(e) => write!(f, "unknown escape {e}"),
+            Self::Expected { token, at } => write!(f, "expected {token} at {at}"),
+            Self::Trailing(rest) => write!(f, "trailing input {rest}"),
+            Self::Unterminated(what) => write!(f, "unterminated {what}"),
+            Self::Number(what) => write!(f, "invalid {what}"),
+            Self::Value(e) => e.fmt(f),
+            Self::Faithful(e) => f.write_str(e),
+            Self::Json(e) => e.fmt(f),
+        }
+    }
+}
+
+impl From<Error> for ParseError {
+    fn from(e: Error) -> Self {
+        Self::Value(e)
+    }
+}
+
+pub fn enumeration(text: &str) -> Result<std::collections::HashSet<Value>, ParseError> {
     let mut decoded = String::new();
     let mut chars = text.chars();
     while let Some(c) = chars.next() {
         if c == '\\' {
-            match chars.next().ok_or("trailing escape")? {
+            match chars.next().ok_or(ParseError::Unterminated("escape"))? {
                 '\\' => decoded.push('\\'),
                 'n' => decoded.push('\n'),
-                c => return Err(format!("unknown escape {c}")),
+                c => return Err(ParseError::Escape(c.to_string())),
             }
         } else {
             decoded.push(c);
@@ -31,7 +69,7 @@ pub fn enumeration(text: &str) -> Result<std::collections::HashSet<Value>, Strin
         }
     }
     if !reader.rest().is_empty() {
-        return Err(format!("trailing input {}", reader.rest()));
+        return Err(ParseError::Trailing(reader.rest().to_owned()));
     }
     Ok(values.into_iter().collect())
 }
@@ -53,26 +91,32 @@ impl Reader<'_> {
             false
         }
     }
-    fn require(&mut self, token: &str) -> Result<(), String> {
+    fn require(&mut self, token: &str) -> Result<(), ParseError> {
         if self.take(token) {
             Ok(())
         } else {
-            Err(format!("expected {token} at {}", self.rest()))
+            Err(ParseError::Expected {
+                token: token.to_owned(),
+                at: self.rest().to_owned(),
+            })
         }
     }
-    fn word(&mut self) -> Result<String, String> {
+    fn word(&mut self) -> Result<String, ParseError> {
         let text = self.rest();
         let n = text
             .find(|c: char| c.is_whitespace() || ",;]}):>".contains(c))
             .unwrap_or(text.len());
         if n == 0 {
-            return Err(format!("expected token at {text}"));
+            return Err(ParseError::Expected {
+                token: "token".into(),
+                at: text.to_owned(),
+            });
         }
         let word = text[..n].to_owned();
         self.cursor += n;
         Ok(word)
     }
-    fn value(&mut self) -> Result<Value, String> {
+    fn value(&mut self) -> Result<Value, ParseError> {
         if self.take("{") {
             let mut values = Vec::new();
             if !self.take("}") {
@@ -84,7 +128,7 @@ impl Reader<'_> {
                     self.require(",")?;
                 }
             }
-            return Value::set(values).map_err(|e| e.to_string());
+            return Value::set(values).map_err(ParseError::from);
         }
         if self.take("<<") {
             let mut values = Vec::new();
@@ -107,7 +151,8 @@ impl Reader<'_> {
                     self.require("|->")?;
                     let value = self.value()?;
                     values.push((
-                        intern_value(&name, false).map_err(|e| e.to_string())?,
+                        intern_value(&name, false)
+                            .map_err(|e| ParseError::Faithful(e.to_string()))?,
                         value,
                     ));
                     if self.take("]") {
@@ -116,11 +161,11 @@ impl Reader<'_> {
                     self.require(",")?;
                 }
             }
-            return Value::function(values).map_err(|e| e.to_string());
+            return Value::function(values).map_err(ParseError::from);
         }
         if self.take("(") {
             if self.take(")") {
-                return Value::function(vec![]).map_err(|e| e.to_string());
+                return Value::function(vec![]).map_err(ParseError::from);
             }
             let mut entries = Vec::new();
             loop {
@@ -133,7 +178,7 @@ impl Reader<'_> {
                 }
                 self.require("@@")?;
             }
-            return Value::function(entries).map_err(|e| e.to_string());
+            return Value::function(entries).map_err(ParseError::from);
         }
         if self.rest().starts_with('"') {
             let text = self.rest();
@@ -151,10 +196,10 @@ impl Reader<'_> {
                     break;
                 }
             }
-            let n = end.ok_or("unterminated string")?;
-            let value: String = serde_json::from_str(&text[..n]).map_err(|e| e.to_string())?;
+            let n = end.ok_or(ParseError::Unterminated("string"))?;
+            let value: String = serde_json::from_str(&text[..n]).map_err(ParseError::Json)?;
             self.cursor += n;
-            return intern_value(&value, false).map_err(|e| e.to_string());
+            return intern_value(&value, false).map_err(|e| ParseError::Faithful(e.to_string()));
         }
         let token = self.word()?;
         match token.as_str() {
@@ -166,13 +211,14 @@ impl Reader<'_> {
                 }
                 if let Some((lo, hi)) = token.split_once("..") {
                     return SetExpr::Interval(
-                        lo.parse().map_err(|_| "interval low")?,
-                        hi.parse().map_err(|_| "interval high")?,
+                        lo.parse().map_err(|_| ParseError::Number("interval low"))?,
+                        hi.parse()
+                            .map_err(|_| ParseError::Number("interval high"))?,
                     )
                     .materialize(100_000)
-                    .map_err(|e| e.to_string());
+                    .map_err(ParseError::from);
                 }
-                intern_value(&token, true).map_err(|e| e.to_string())
+                intern_value(&token, true).map_err(|e| ParseError::Faithful(e.to_string()))
             }
         }
     }

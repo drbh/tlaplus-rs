@@ -1,6 +1,6 @@
 use std::{convert::Infallible, num::NonZeroUsize};
 use tla_disk::store::Store;
-use tla_disk::{Codec, ValueCodec};
+use tla_disk::{Codec, CodecError, ValueCodec};
 use tla_engine::{Completion, Options, Transition, TransitionSystem, ViolationKind};
 use tla_values::Value;
 
@@ -42,15 +42,15 @@ impl TransitionSystem for Graph {
 }
 struct Numbers;
 impl Codec<usize, usize> for Numbers {
-    fn state(&self, n: &usize) -> Result<Vec<u8>, String> {
+    fn state(&self, n: &usize) -> Result<Vec<u8>, CodecError> {
         Ok(n.to_le_bytes().to_vec())
     }
-    fn key(&self, n: &usize) -> Result<Vec<u8>, String> {
+    fn key(&self, n: &usize) -> Result<Vec<u8>, CodecError> {
         self.state(n)
     }
-    fn decode(&self, bytes: &[u8]) -> Result<usize, String> {
+    fn decode(&self, bytes: &[u8]) -> Result<usize, CodecError> {
         Ok(usize::from_le_bytes(
-            bytes.try_into().map_err(|_| "bad integer")?,
+            bytes.try_into().map_err(|_| CodecError::Truncated)?,
         ))
     }
 }

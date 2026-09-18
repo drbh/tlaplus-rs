@@ -2,10 +2,13 @@ use crate::{Binding, Lower, Scope};
 use std::collections::BTreeMap;
 use tla_ir::{Builtin as B, Expr as I, ExprId, Level, Literal, Operator, Quantifier};
 use tla_modules::Error;
-use tla_syntax::Expr;
+use tla_syntax::{Definition, Expr};
 
 impl Lower<'_> {
     pub(crate) fn expr(&mut self, expression: &Expr) -> Result<ExprId, Error> {
+        // Inside ENABLED, an expression the action primes acts as a fresh
+        // next-state variable (see the ENABLED arm below); it lowers to its
+        // current value paired with that variable.
         if let Some(&(_, slot)) = self.enabled_scope.iter().find(|(e, _)| e == expression) {
             let scope = std::mem::take(&mut self.enabled_scope);
             let current = self.expr(expression);
@@ -19,22 +22,7 @@ impl Lower<'_> {
         }
         Ok(match expression {
             Expr::Name(name) if name == "@" => self.program.push(I::At, Level::Constant),
-            Expr::Let(definitions, body) => {
-                let scope: BTreeMap<_, _> = definitions
-                    .iter()
-                    .map(|d| (d.name.clone(), d.clone()))
-                    .collect();
-                if scope.len() != definitions.len() {
-                    return Err(Error("duplicate LET definition".into()));
-                }
-                self.scoped.push(Scope {
-                    definitions: scope,
-                    locals: self.locals.clone(),
-                });
-                let body = self.expr(body);
-                self.scoped.pop();
-                body?
-            }
+            Expr::Let(definitions, body) => self.let_in(definitions, body)?,
             Expr::Record(fields) => {
                 let mut pairs = Vec::new();
                 for (key, value) in fields {
@@ -86,50 +74,13 @@ impl Lower<'_> {
                 }
             },
             Expr::Call(name, args) => self.call(name, args)?,
-            Expr::Unary(op, child) if op == "'" => {
-                if let Expr::Name(name) = child.as_ref()
-                    && self.locals.get(name).is_none()
-                    && let Some(slot) = self.module.variables.iter().position(|v| v == name)
-                {
-                    return Ok(self
-                        .program
-                        .push(I::Variable { slot, primed: true }, Level::Action));
-                }
-                let current = self.expr(child)?;
-                let next = self
-                    .program
-                    .prime(current)
-                    .map_err(|e| Error(e.to_string()))?;
-                self.program.nodes[next].level = self.program.nodes[next].level.max(Level::Action);
-                next
-            }
+            Expr::Unary(op, child) if op == "'" => self.prime(child)?,
             Expr::Unary(op, child) if matches!(op.as_str(), "[]" | "<>") => {
                 let child = self.expr(child)?;
                 self.program
                     .temporal(op.clone(), vec![child], Vec::new(), Level::Temporal)
             }
-            Expr::Unary(op, child) if op == "ENABLED" => {
-                // Like TLC, an instance variable substituted by an expression is a
-                // fresh variable within ENABLED.
-                let depth = self.enabled_scope.len();
-                let mut primed = Vec::new();
-                self.primed_compounds(child, &mut primed, &mut Vec::new());
-                for compound in primed {
-                    if !self.enabled_scope.iter().any(|(e, _)| *e == compound) {
-                        let slot = self.program.variables.len() + self.program.enabled_variables;
-                        self.program.enabled_variables += 1;
-                        self.enabled_scope.push((compound, slot));
-                    }
-                }
-                let action = self.expr(child);
-                self.enabled_scope.truncate(depth);
-                let action = action?;
-                let enabled = I::Apply {
-                    op: B::Enabled,
-                    args: vec![action],
-                };
-                self.program.push(enabled, Level::State)
-            }
+            Expr::Unary(op, child) if op == "ENABLED" => self.enabled(child)?,
             Expr::Unary(op, child) => {
                 let op = match op.as_str() {
                     "~" => B::Not,
@@ -201,6 +152,8 @@ impl Lower<'_> {
         domain: Option<&Expr>,
         body: &Expr,
     ) -> Result<ExprId, Error> {
+        // Only the outermost binder of a recursive function definition may
+        // claim its name; any binder nested inside sees none.
         let this = self.function_name.take();
         let domain = domain.map(|d| self.expr(d)).transpose()?;
         let saved = self.locals.clone();
@@ -211,13 +164,16 @@ impl Lower<'_> {
                     let component = self.program.tuple_local(slot, index, names.len());
                     self.locals.node(name, component);
                 }
+                // Binders that test their elements restrict the domain to the
+                // tuples the pattern accepts; quantifiers require an exact
+                // arity, as TLC does, while CHOOSE and filters allow longer
+                // tuples. Constructors (`map`, `function`) keep the whole
+                // domain, because every element must be mapped.
+                let exact = matches!(kind, "\\E" | "\\A");
                 match kind {
-                    "\\E" | "\\A" | "CHOOSE" | "filter" => Some(self.program.tuple_domain(
-                        slot,
-                        domain,
-                        names.len(),
-                        matches!(kind, "\\E" | "\\A"),
-                    )),
+                    "\\E" | "\\A" | "CHOOSE" | "filter" => {
+                        Some(self.program.tuple_domain(slot, domain, names.len(), exact))
+                    }
                     _ => Some(domain),
                 }
             }
@@ -272,6 +228,9 @@ impl Lower<'_> {
             "CHOOSE" => I::Choose { slot, domain, body },
             "function" => I::Function { slot, domain, body },
             "\\EE" | "\\AA" => {
+                // Temporal quantifiers have no domain; the binding records the
+                // slot with the body standing in, since the temporal layer
+                // only needs to know which local the formula closes over.
                 return Ok(self.program.temporal(
                     kind.into(),
                     vec![body],
@@ -297,7 +256,71 @@ impl Lower<'_> {
 }
 
 impl Lower<'_> {
-    /// Operands of primes that are not variable names, such as `(f[k])'`, looking
+    /// `LET defs IN body`: the definitions are visible to the body and to
+    /// each other, as a scope over the enclosing locals.
+    fn let_in(&mut self, definitions: &[Definition], body: &Expr) -> Result<ExprId, Error> {
+        let scope: BTreeMap<_, _> = definitions
+            .iter()
+            .map(|d| (d.name.clone(), d.clone()))
+            .collect();
+        if scope.len() != definitions.len() {
+            return Err(Error("duplicate LET definition".into()));
+        }
+        self.scoped.push(Scope {
+            definitions: scope,
+            locals: self.locals.clone(),
+        });
+        let body = self.expr(body);
+        self.scoped.pop();
+        body
+    }
+
+    /// `e'`: a state variable primes to its next-state slot; anything else is
+    /// lowered and then primed structurally, which raises it to action level.
+    fn prime(&mut self, child: &Expr) -> Result<ExprId, Error> {
+        if let Expr::Name(name) = child
+            && self.locals.get(name).is_none()
+            && let Some(slot) = self.module.variables.iter().position(|v| v == name)
+        {
+            return Ok(self
+                .program
+                .push(I::Variable { slot, primed: true }, Level::Action));
+        }
+        let current = self.expr(child)?;
+        let next = self
+            .program
+            .prime(current)
+            .map_err(|e| Error(e.to_string()))?;
+        self.program.nodes[next].level = self.program.nodes[next].level.max(Level::Action);
+        Ok(next)
+    }
+
+    /// `ENABLED A`.
+    fn enabled(&mut self, child: &Expr) -> Result<ExprId, Error> {
+        // Like TLC, every primed compound expression inside ENABLED (an
+        // instance variable substituted by an expression, say) acts as
+        // a fresh variable of the next state.
+        let depth = self.enabled_scope.len();
+        let mut primed = Vec::new();
+        self.primed_compounds(child, &mut primed, &mut Vec::new());
+        for compound in primed {
+            if !self.enabled_scope.iter().any(|(e, _)| *e == compound) {
+                let slot = self.program.variables.len() + self.program.enabled_variables;
+                self.program.enabled_variables += 1;
+                self.enabled_scope.push((compound, slot));
+            }
+        }
+        let action = self.expr(child);
+        self.enabled_scope.truncate(depth);
+        let action = action?;
+        let enabled = I::Apply {
+            op: B::Enabled,
+            args: vec![action],
+        };
+        Ok(self.program.push(enabled, Level::State))
+    }
+
+    /// Operands of primes that are not names, such as `(f[k])'`, looking
     /// through the definitions the expression calls.
     fn primed_compounds(
         &self,

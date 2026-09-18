@@ -55,10 +55,7 @@ pub fn check(
                 return Ok(verdicts);
             }
             Check::StateLimit { .. } => {
-                return Err(tla_temporal::Error::Search(
-                    "liveness product limit reached; result is incomplete".into(),
-                )
-                .into());
+                return Err(tla_temporal::Error::ProductLimit.into());
             }
         }
     }

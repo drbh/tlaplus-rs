@@ -55,7 +55,9 @@ tla examples/01-counter/Counter.tla
 | `tla-stack-tests`                                      | whole-stack tests and the crate layering check     |
 
 the layering between these groups is declared under `[workspace.metadata.architecture]`
-in `Cargo.toml` and enforced by `tla-stack-tests/tests/architecture.rs`.
+in `Cargo.toml` and enforced by `tla-stack-tests/tests/architecture.rs`. every crate also keeps
+a shape enforced by `tla-stack-tests/tests/shape.rs`: module docs, typed errors in every
+signature, and no function over 170 lines. both run with `cargo test --workspace`.
 
 ## develop
 

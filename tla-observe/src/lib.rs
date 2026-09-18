@@ -1,3 +1,5 @@
+//! Instrumentation: a [`Timeline`] of phases and the counts and durations a
+//! measured transition system records, written out for profiling a run.
 mod failure;
 pub use failure::{Diagnosed, Failure, Phase};
 use std::{

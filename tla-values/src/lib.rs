@@ -1,3 +1,6 @@
+//! Finite TLA+ values: booleans, integers, interned strings and model values,
+//! sets and functions, with TLC's ordering and equality. [`Value`] is shared
+//! by every layer above; [`SetExpr`] describes sets too large to enumerate.
 mod operations;
 mod sets;
 pub use sets::{SetExpr, SetIter};
@@ -142,12 +145,7 @@ impl Value {
             values
                 .into_iter()
                 .enumerate()
-                .map(|(i, v)| {
-                    (
-                        Self::Int(i32::try_from(i + 1).expect("tuple length fits i32")),
-                        v,
-                    )
-                })
+                .map(|(i, v)| (Self::position(i), v))
                 .collect(),
         )
     }
@@ -301,4 +299,11 @@ fn sort<T>(values: &mut [T], key: impl Fn(&T) -> &Value) -> Result<(), Error> {
         })
     });
     error.map_or(Ok(()), Err)
+}
+
+impl Value {
+    /// The 1-based position of `index` in a tuple, as TLA+ numbers its elements.
+    pub fn position(index: usize) -> Self {
+        Self::Int(i32::try_from(index + 1).expect("tuple position fits an i32"))
+    }
 }

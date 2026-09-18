@@ -1,3 +1,8 @@
+//! The IR interpreter. An [`Evaluator`] evaluates an expression of a program
+//! against a state, a successor state and local bindings, applying the
+//! standard library from `tla-library` and the TLC registers and caches from
+//! `tla-runtime`.
+mod control;
 mod deferred;
 mod functional;
 mod sets;
@@ -11,7 +16,7 @@ pub use tla_random::{Random, Sessions as RandomSessions};
 pub use tla_runtime::{Cache, Caches, Registers};
 pub type Strings = Arc<Mutex<BTreeMap<String, u32>>>;
 pub type Enabled<'a> = dyn Fn(ExprId, &[Option<Value>]) -> Result<bool, Error> + 'a;
-use tla_ir::{Builtin, Expr, ExprId, Program, Quantifier};
+use tla_ir::{Builtin, Expr, ExprId, Program};
 pub use tla_values::{SetExpr, Value};
 
 #[derive(Clone)]
@@ -180,25 +185,7 @@ impl<'a> Evaluator<'a> {
                 },
                 locals,
             ),
-            Expr::Call { operator, args } => {
-                let op = self
-                    .program
-                    .operators
-                    .get(*operator)
-                    .ok_or_else(|| Error("unknown operator".into()))?;
-                if op.parameters.len() != args.len() {
-                    return Err(Error("operator arity mismatch".into()));
-                }
-                let values = args
-                    .iter()
-                    .map(|id| evaluate(*id, locals))
-                    .collect::<Result<Vec<_>, _>>()?;
-                let mut nested = locals.clone();
-                for (&slot, value) in op.parameters.iter().zip(values) {
-                    bind(&mut nested, slot, value);
-                }
-                evaluate(op.body, &mut nested)
-            }
+            Expr::Call { operator, args } => self.call(*operator, args, locals, depth),
             Expr::Apply {
                 op: Builtin::And,
                 args,
@@ -241,112 +228,18 @@ impl<'a> Evaluator<'a> {
             Expr::Apply {
                 op: Builtin::Except,
                 args,
-            } => {
-                let (&base, updates) = args
-                    .split_first()
-                    .ok_or_else(|| Error("EXCEPT without base".into()))?;
-                let mut function = evaluate(base, locals)?;
-                if !matches!(function, Value::Function(_)) {
-                    return Err(Error("EXCEPT requires a function".into()));
-                }
-                for update in updates {
-                    let Expr::Apply {
-                        op: Builtin::Tuple,
-                        args,
-                    } = &self.program.nodes[*update].expr
-                    else {
-                        return Err(Error("invalid EXCEPT update".into()));
-                    };
-                    if args.len() != 2 {
-                        return Err(Error("invalid EXCEPT update arity".into()));
-                    }
-                    let path = evaluate(args[0], locals)?.sequence()?;
-                    let mut previous = function.clone();
-                    let mut found = true;
-                    for key in &path {
-                        match previous.apply(key) {
-                            Ok(value) => previous = value,
-                            Err(_) => {
-                                found = false;
-                                break;
-                            }
-                        }
-                    }
-                    if found {
-                        let evaluator = Evaluator {
-                            at: Some(previous),
-                            ..self.clone()
-                        };
-                        let replacement = evaluator.eval(args[1], locals, depth + 1)?;
-                        function = function.except(&path, replacement)?;
-                    }
-                }
-                Ok(function)
-            }
+            } => self.except_updates(args, locals, depth),
             Expr::Apply {
                 op: Builtin::Case,
                 args,
-            } => {
-                for pair in args {
-                    let Expr::Apply {
-                        op: Builtin::Tuple,
-                        args,
-                    } = &self.program.nodes[*pair].expr
-                    else {
-                        return Err(Error("invalid CASE branch".into()));
-                    };
-                    if args.len() != 2 {
-                        return Err(Error("invalid CASE branch arity".into()));
-                    }
-                    if evaluate(args[0], locals)?.boolean()? {
-                        return evaluate(args[1], locals);
-                    }
-                }
-                Err(Error("CASE has no true condition".into()))
-            }
+            } => self.case(args, locals, depth),
             Expr::Apply { op, args } => {
                 let values = args
                     .iter()
                     .map(|id| evaluate(*id, locals))
                     .collect::<Result<Vec<_>, _>>()?;
-                if let Some(Value::String(first)) = values.first() {
-                    match op {
-                        Builtin::Concat if values.len() == 2 => {
-                            let Value::String(second) = &values[1] else {
-                                return Err(Error("string concatenation expects strings".into()));
-                            };
-                            return self.string(format!("{}{}", first.text, second.text));
-                        }
-                        Builtin::Tail if values.len() == 1 => {
-                            let units: Vec<_> = first.text.encode_utf16().collect();
-                            if units.is_empty() {
-                                return Err(Error("Tail of empty sequence".into()));
-                            }
-                            return self.string(
-                                String::from_utf16(&units[1..])
-                                    .map_err(|e| Error(e.to_string()))?,
-                            );
-                        }
-                        Builtin::Subsequence if values.len() == 3 => {
-                            let units: Vec<_> = first.text.encode_utf16().collect();
-                            let range = tla_library::subsequence_range(
-                                &values[0],
-                                &values[1],
-                                &values[2],
-                                units.len(),
-                            )?;
-                            let units = &units[range];
-                            return self.string(
-                                String::from_utf16(units).map_err(|e| Error(e.to_string()))?,
-                            );
-                        }
-                        Builtin::Len if values.len() == 1 => {
-                            return i32::try_from(first.text.encode_utf16().count())
-                                .map(Value::Int)
-                                .map_err(|e| Error(e.to_string()));
-                        }
-                        _ => {}
-                    }
+                if let Some(value) = self.string_sequence(*op, &values)? {
+                    return Ok(value);
                 }
                 tla_library::validate_method_args(
                     self.program.methods.get(&id).map(String::as_str),
@@ -359,103 +252,21 @@ impl<'a> Evaluator<'a> {
                 slot,
                 domain,
                 body,
-            } => {
-                let domain = functional::enumerate(
-                    self,
-                    domain
-                        .ok_or_else(|| Error("unbounded quantifier cannot be enumerated".into()))?,
-                    locals,
-                    depth,
-                )?;
-                let mut output = Vec::new();
-                for value in &domain {
-                    deferred::validate_tuple_binding(
-                        self,
-                        *body,
-                        *slot,
-                        value,
-                        matches!(kind, Quantifier::Exists | Quantifier::ForAll),
-                    )?;
-                    let mut nested = locals.clone();
-                    bind(&mut nested, *slot, value.clone());
-                    let result = evaluate(*body, &mut nested)?;
-                    match kind {
-                        Quantifier::Exists if result.boolean()? => return Ok(Value::Bool(true)),
-                        Quantifier::ForAll if !result.boolean()? => return Ok(Value::Bool(false)),
-                        Quantifier::SetFilter if result.boolean()? => output.push(value.clone()),
-                        Quantifier::SetMap => output.push(result),
-                        _ => {}
-                    }
-                }
-                match kind {
-                    Quantifier::Exists => Ok(Value::Bool(false)),
-                    Quantifier::ForAll => Ok(Value::Bool(true)),
-                    _ => Ok(Value::set(output)?),
-                }
-            }
+            } => self.quantify(*kind, *slot, *domain, *body, locals, depth),
             Expr::Function { slot, domain, body } => {
-                let domain = functional::enumerate(
-                    self,
-                    domain.ok_or_else(|| Error("function value requires a domain".into()))?,
-                    locals,
-                    depth,
-                )?;
-                let mut entries = Vec::new();
-                for key in &domain {
-                    deferred::validate_tuple_binding(self, *body, *slot, key, true)?;
-                    let mut nested = locals.clone();
-                    bind(&mut nested, *slot, key.clone());
-                    entries.push((key.clone(), evaluate(*body, &mut nested)?));
-                }
-                Ok(Value::function(entries)?)
+                self.function(*slot, *domain, *body, locals, depth)
             }
             Expr::RecursiveFunction { .. } => {
                 Err(Error("recursive function requires application".into()))
             }
             Expr::Choose { slot, domain, body } => {
-                let domain = functional::enumerate(
-                    self,
-                    domain.ok_or_else(|| Error("unbounded CHOOSE cannot be evaluated".into()))?,
-                    locals,
-                    depth,
-                )?;
-                for value in &domain {
-                    deferred::validate_tuple_binding(self, *body, *slot, value, true)?;
-                    let mut nested = locals.clone();
-                    bind(&mut nested, *slot, value.clone());
-                    if evaluate(*body, &mut nested)?.boolean()? {
-                        return Ok(value.clone());
-                    }
-                }
-                Err(Error("CHOOSE has no satisfying element".into()))
+                self.choose(*slot, *domain, *body, locals, depth)
             }
             Expr::Except {
                 function,
                 key,
                 value,
-            } => {
-                let function = evaluate(*function, locals)?;
-                let key = evaluate(*key, locals)?;
-                let Value::Function(entries) = function else {
-                    return Err(Error("EXCEPT requires a function".into()));
-                };
-                let replacement = evaluate(*value, locals)?;
-                Ok(Value::function(
-                    entries
-                        .iter()
-                        .map(|(k, v)| {
-                            (
-                                k.clone(),
-                                if *k == key {
-                                    replacement.clone()
-                                } else {
-                                    v.clone()
-                                },
-                            )
-                        })
-                        .collect(),
-                )?)
-            }
+            } => self.except(*function, *key, *value, locals, depth),
             Expr::Temporal { op, .. } => Err(Error(format!(
                 "temporal expression {op} requires behavior evaluation"
             ))),
@@ -512,10 +323,14 @@ pub fn intern_string(
     strings: &Mutex<BTreeMap<String, u32>>,
     text: String,
     allow_new: bool,
-) -> Result<Value, String> {
-    let mut strings = strings.lock().map_err(|_| "string intern table poisoned")?;
+) -> Result<Value, Error> {
+    let mut strings = strings
+        .lock()
+        .map_err(|_| Error("string intern table poisoned".into()))?;
     if !allow_new && !strings.contains_key(&text) {
-        return Err("parallel evaluation cannot assign a new string ordinal".into());
+        return Err(Error(
+            "parallel evaluation cannot assign a new string ordinal".into(),
+        ));
     }
     let next = strings
         .values()
@@ -523,7 +338,7 @@ pub fn intern_string(
         .max()
         .unwrap_or(0)
         .checked_add(1)
-        .ok_or("string ordinal overflow")?;
+        .ok_or_else(|| Error("string ordinal overflow".into()))?;
     let ordinal = *strings.entry(text.clone()).or_insert(next);
     Ok(Value::string(text, ordinal))
 }

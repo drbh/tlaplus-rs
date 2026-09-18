@@ -5,7 +5,7 @@ use tla_ir::{Builtin, Expr, ExprId, Level, Program};
 use tla_model::BoundModel;
 use tla_sany_semantic::{NodeId, nodes::NodeData};
 use tla_tlc_eval::{TlcState, context::Context, context::Obj, spec::Action};
-use tla_tlc_value::Value;
+use tla_tlc_value::{TlcError, Value};
 
 impl Model {
     pub fn lower(&self) -> Result<BoundModel, ModelError> {
@@ -66,7 +66,8 @@ impl Model {
         Ok(model)
     }
 }
-struct Resolved {
+#[derive(Clone)]
+pub(super) struct Resolved {
     value: Option<tla_tlc_value::Value>,
     definition: Option<(NodeId, tla_sany_semantic::nodes::OpDefData)>,
 }
@@ -104,8 +105,17 @@ impl<'a> Lower<'a> {
             enabled_scope: HashMap::new(),
         }
     }
-    #[rustfmt::skip]    fn error(&self, message: impl ToString) -> ModelError { ModelError::message(Stage::Load, message) }
-    #[rustfmt::skip]    pub(crate) fn invalid_tlc_eval(&mut self) -> Result<ExprId, ModelError> { self.builtin(Builtin::TlcEvalDefinition, Vec::new(), false, Level::Constant) }
+    fn error(&self, message: impl ToString) -> ModelError {
+        ModelError::message(Stage::Load, message)
+    }
+    pub(crate) fn invalid_tlc_eval(&mut self) -> Result<ExprId, ModelError> {
+        self.builtin(
+            Builtin::TlcEvalDefinition,
+            Vec::new(),
+            false,
+            Level::Constant,
+        )
+    }
     fn resolve(
         &mut self,
         node: NodeId,
@@ -347,7 +357,14 @@ impl<'a> Lower<'a> {
         }
         (slot, domain)
     }
-    #[rustfmt::skip]    fn level_of(&self, id: NodeId) -> Level { match self.model.tool.graph().node(id).level.level { 1 => Level::State, 2 => Level::Action, 3 => Level::Temporal, _ => Level::Constant } }
+    fn level_of(&self, id: NodeId) -> Level {
+        match self.model.tool.graph().node(id).level.level {
+            1 => Level::State,
+            2 => Level::Action,
+            3 => Level::Temporal,
+            _ => Level::Constant,
+        }
+    }
     fn action(&mut self, action: &Action) -> Result<ExprId, ModelError> {
         let mut substitutions = HashMap::new();
         for wrapper in &action.pred.wrappers {
@@ -364,16 +381,55 @@ impl<'a> Lower<'a> {
         }
         self.node(action.pred.node, &action.con, &substitutions, 0)
     }
-    #[allow(clippy::too_many_arguments)] #[rustfmt::skip]
-    fn recursive(&mut self, id: NodeId, name: String, def: tla_sany_semantic::nodes::OpDefData, params: &[NodeId], args: Vec<ExprId>, nested: &mut HashMap<NodeId, ExprId>, context: &Context, depth: usize, level: Level) -> Result<ExprId, ModelError> {
-        let op = if let Some(&op) = self.cache.operators.get(&id) { op } else {
-            let slots = (0..params.len()).map(|_| { let s = self.next_local; self.next_local += 1; s }).collect::<Vec<_>>(); let op = self.program.operators.len(); self.cache.operators.insert(id, op);
-            self.program.operators.push(tla_ir::Operator { name, parameters: slots.clone(), body: 0 }); for (param, slot) in params.iter().zip(slots) { nested.insert(*param, self.program.push(Expr::Local(slot), Level::Constant)); }
+    #[allow(clippy::too_many_arguments)]
+    fn recursive(
+        &mut self,
+        id: NodeId,
+        name: String,
+        def: tla_sany_semantic::nodes::OpDefData,
+        params: &[NodeId],
+        args: Vec<ExprId>,
+        nested: &mut HashMap<NodeId, ExprId>,
+        context: &Context,
+        depth: usize,
+        level: Level,
+    ) -> Result<ExprId, ModelError> {
+        let op = if let Some(&op) = self.cache.operators.get(&id) {
+            op
+        } else {
+            let slots = (0..params.len())
+                .map(|_| {
+                    let s = self.next_local;
+                    self.next_local += 1;
+                    s
+                })
+                .collect::<Vec<_>>();
+            let op = self.program.operators.len();
+            self.cache.operators.insert(id, op);
+            self.program.operators.push(tla_ir::Operator {
+                name,
+                parameters: slots.clone(),
+                body: 0,
+            });
+            for (param, slot) in params.iter().zip(slots) {
+                nested.insert(
+                    *param,
+                    self.program.push(Expr::Local(slot), Level::Constant),
+                );
+            }
             self.expanding.push(id);
-            let body = self.node(def.body.ok_or_else(|| self.error("missing recursive body"))?, context, nested, depth + 1);
+            let body = self.node(
+                def.body
+                    .ok_or_else(|| self.error("missing recursive body"))?,
+                context,
+                nested,
+                depth + 1,
+            );
             self.expanding.pop();
-            self.program.operators[op].body = body?; op
-        }; Ok(self.program.push(Expr::Call { operator: op, args }, level))
+            self.program.operators[op].body = body?;
+            op
+        };
+        Ok(self.program.push(Expr::Call { operator: op, args }, level))
     }
     fn value(&mut self, value: &tla_tlc_value::Value) -> Result<ExprId, ModelError> {
         if let tla_tlc_value::Value::OpRcd(table) = value {
@@ -541,7 +597,7 @@ impl Model {
     pub fn constant_expression(
         &self,
         name: &str,
-    ) -> Result<(Program, ExprId, Result<tla_values::Value, String>), ModelError> {
+    ) -> Result<(Program, ExprId, Result<tla_values::Value, TlcError>), ModelError> {
         let graph = self.tool.graph();
         let id = graph
             .node_ids()
@@ -576,8 +632,7 @@ impl Model {
                 &TlcState::Empty,
                 0,
             )
-            .and_then(|value| crate::values::from_faithful(&value))
-            .map_err(|e| e.to_string());
+            .and_then(|value| crate::values::from_faithful(&value));
         Ok((program, expression, value))
     }
 }

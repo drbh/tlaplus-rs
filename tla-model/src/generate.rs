@@ -203,24 +203,7 @@ impl Generator<'_> {
             Expr::Apply {
                 op: Builtin::Case,
                 args,
-            } => {
-                for branch in args {
-                    let Expr::Apply {
-                        op: Builtin::Tuple,
-                        args,
-                    } = &self.model.program.nodes[*branch].expr
-                    else {
-                        return Err(Error("invalid CASE branch".into()));
-                    };
-                    let [guard, body] = args.as_slice() else {
-                        return Err(Error("invalid CASE branch arity".into()));
-                    };
-                    if self.evaluate(*guard, &candidate, locals)?.boolean()? {
-                        return self.solve(*body, candidate, locals, depth + 1, output);
-                    }
-                }
-                Err(Error("CASE has no true condition".into()))
-            }
+            } => self.case(args, candidate, locals, depth, output),
             Expr::Apply {
                 op: Builtin::And,
                 args,
@@ -265,65 +248,11 @@ impl Generator<'_> {
             Expr::Apply {
                 op: op @ (Builtin::In | Builtin::SubsetEq),
                 args,
-            } if args.len() == 2 => {
-                if let Some(slot) = self
-                    .model
-                    .program
-                    .assignment_variable(args[0], self.initial)
-                {
-                    let domain = self.evaluate(args[1], &candidate, locals)?;
-                    let values = if *op == Builtin::SubsetEq {
-                        tla_eval::SetExpr::subsets(&domain)?
-                    } else {
-                        tla_eval::SetExpr::finite(&domain)?
-                    };
-                    for value in values.iter()? {
-                        if self
-                            .assign(candidate.clone(), slot, value, output)?
-                            .is_break()
-                        {
-                            return Ok(ControlFlow::Break(()));
-                        }
-                    }
-                    Ok(ControlFlow::Continue(()))
-                } else {
-                    self.filter(id, candidate, locals, output)
-                }
-            }
+            } if args.len() == 2 => self.membership(id, *op, args, candidate, locals, output),
             Expr::Apply {
                 op: Builtin::Unchanged,
                 args,
-            } if !self.initial => {
-                let mut candidate = candidate;
-                let mut pending = args.clone();
-                while let Some(arg) = pending.pop() {
-                    match &self.model.program.nodes[arg].expr {
-                        Expr::Variable {
-                            slot,
-                            primed: false,
-                        } => {
-                            let value = self.current.get(*slot).and_then(Clone::clone).ok_or_else(
-                                || Error("UNCHANGED has unbound current variable".into()),
-                            )?;
-                            if let Some(previous) = &candidate[*slot]
-                                && !previous.semantic_eq(&value)?
-                            {
-                                return Ok(ControlFlow::Continue(()));
-                            }
-                            candidate[*slot] = Some(value);
-                        }
-                        Expr::Apply {
-                            op: Builtin::Tuple,
-                            args,
-                        } => pending.extend(args),
-                        Expr::Call { operator, args } if args.is_empty() => {
-                            pending.push(self.model.program.operators[*operator].body)
-                        }
-                        _ => return Err(Error("UNCHANGED of a non-variable".into())),
-                    }
-                }
-                output(candidate)
-            }
+            } if !self.initial => self.unchanged(args, candidate, output),
             Expr::If {
                 condition,
                 then_expr,
@@ -344,76 +273,199 @@ impl Generator<'_> {
                 slot,
                 domain,
                 body,
-            } => {
-                let domain =
-                    domain.ok_or_else(|| Error("unbounded quantifier in an action".into()))?;
-                let values = with_evaluator(
-                    self.model,
-                    if self.initial {
-                        &candidate
-                    } else {
-                        self.current
-                    },
-                    &candidate,
-                    self.level,
-                    |evaluator| evaluator.enumerate_with_locals(domain, locals),
-                )?;
-                if *kind == Quantifier::ForAll {
-                    return self.all_bindings(
-                        (*slot, *body, depth + 1),
-                        &values,
-                        candidate,
-                        locals,
-                        output,
-                    );
-                }
-                for value in &values {
-                    let mut nested = locals.to_vec();
-                    bind(&mut nested, *slot, value.clone());
-                    if self
-                        .solve(*body, candidate.clone(), &nested, depth + 1, output)?
-                        .is_break()
-                    {
-                        return Ok(ControlFlow::Break(()));
-                    }
-                }
-                Ok(ControlFlow::Continue(()))
-            }
+            } => self.quantify(
+                *kind, *slot, *domain, *body, candidate, locals, depth, output,
+            ),
             Expr::Call { operator, args } => {
-                let operator = self
-                    .model
-                    .program
-                    .operators
-                    .get(*operator)
-                    .ok_or_else(|| Error("invalid action operator".into()))?;
-                if operator.parameters.len() != args.len() {
-                    return Err(Error("action operator arity mismatch".into()));
-                }
-                let mut nested = locals.to_vec();
-                let mut expanded = None;
-                let mut body = operator.body;
-                for (&slot, arg) in operator.parameters.iter().zip(args) {
-                    if self
-                        .model
-                        .program
-                        .assignment_variable(*arg, self.initial)
-                        .is_some_and(|slot| candidate[slot].is_none())
-                    {
-                        let model = expanded.get_or_insert_with(|| self.model.clone());
-                        body = model.program.replace_local(body, slot, *arg);
-                    } else {
-                        bind(&mut nested, slot, self.evaluate(*arg, &candidate, locals)?);
-                    }
-                }
-                Generator {
-                    model: expanded.as_ref().unwrap_or(self.model),
-                    ..*self
-                }
-                .solve(body, candidate, &nested, depth + 1, output)
+                self.call(*operator, args, candidate, locals, depth, output)
             }
             _ => self.filter(id, candidate, locals, output),
         }
     }
+    /// `CASE`: the first branch whose guard holds is solved.
+    fn case(
+        &self,
+        branches: &[ExprId],
+        candidate: Partial,
+        locals: &[Option<Value>],
+        depth: usize,
+        output: &mut Output<'_>,
+    ) -> Flow {
+        for branch in branches {
+            let Expr::Apply {
+                op: Builtin::Tuple,
+                args,
+            } = &self.model.program.nodes[*branch].expr
+            else {
+                return Err(Error("invalid CASE branch".into()));
+            };
+            let [guard, body] = args.as_slice() else {
+                return Err(Error("invalid CASE branch arity".into()));
+            };
+            if self.evaluate(*guard, &candidate, locals)?.boolean()? {
+                return self.solve(*body, candidate, locals, depth + 1, output);
+            }
+        }
+        Err(Error("CASE has no true condition".into()))
+    }
+
+    /// `x' \\in S` or `x' \\subseteq S` assigns each element (or subset) of
+    /// `S` in turn; any other membership is a filter.
+    fn membership(
+        &self,
+        id: ExprId,
+        op: Builtin,
+        args: &[ExprId],
+        candidate: Partial,
+        locals: &[Option<Value>],
+        output: &mut Output<'_>,
+    ) -> Flow {
+        if let Some(slot) = self
+            .model
+            .program
+            .assignment_variable(args[0], self.initial)
+        {
+            let domain = self.evaluate(args[1], &candidate, locals)?;
+            let values = if op == Builtin::SubsetEq {
+                tla_eval::SetExpr::subsets(&domain)?
+            } else {
+                tla_eval::SetExpr::finite(&domain)?
+            };
+            for value in values.iter()? {
+                if self
+                    .assign(candidate.clone(), slot, value, output)?
+                    .is_break()
+                {
+                    return Ok(ControlFlow::Break(()));
+                }
+            }
+            Ok(ControlFlow::Continue(()))
+        } else {
+            self.filter(id, candidate, locals, output)
+        }
+    }
+
+    /// `UNCHANGED` fixes each named variable, looking through tuples and
+    /// zero-argument operators, to its current value.
+    fn unchanged(&self, args: &[ExprId], candidate: Partial, output: &mut Output<'_>) -> Flow {
+        let mut candidate = candidate;
+        let mut pending = args.to_vec();
+        while let Some(arg) = pending.pop() {
+            match &self.model.program.nodes[arg].expr {
+                Expr::Variable {
+                    slot,
+                    primed: false,
+                } => {
+                    let value = self
+                        .current
+                        .get(*slot)
+                        .and_then(Clone::clone)
+                        .ok_or_else(|| Error("UNCHANGED has unbound current variable".into()))?;
+                    if let Some(previous) = &candidate[*slot]
+                        && !previous.semantic_eq(&value)?
+                    {
+                        return Ok(ControlFlow::Continue(()));
+                    }
+                    candidate[*slot] = Some(value);
+                }
+                Expr::Apply {
+                    op: Builtin::Tuple,
+                    args,
+                } => pending.extend(args),
+                Expr::Call { operator, args } if args.is_empty() => {
+                    pending.push(self.model.program.operators[*operator].body)
+                }
+                _ => return Err(Error("UNCHANGED of a non-variable".into())),
+            }
+        }
+        output(candidate)
+    }
+
+    /// `\\E` tries each binding; `\\A` solves the body under all of them.
+    #[allow(clippy::too_many_arguments)]
+    fn quantify(
+        &self,
+        kind: Quantifier,
+        slot: usize,
+        domain: Option<ExprId>,
+        body: ExprId,
+        candidate: Partial,
+        locals: &[Option<Value>],
+        depth: usize,
+        output: &mut Output<'_>,
+    ) -> Flow {
+        let domain = domain.ok_or_else(|| Error("unbounded quantifier in an action".into()))?;
+        let values = with_evaluator(
+            self.model,
+            if self.initial {
+                &candidate
+            } else {
+                self.current
+            },
+            &candidate,
+            self.level,
+            |evaluator| evaluator.enumerate_with_locals(domain, locals),
+        )?;
+        if kind == Quantifier::ForAll {
+            return self.all_bindings((slot, body, depth + 1), &values, candidate, locals, output);
+        }
+        for value in &values {
+            let mut nested = locals.to_vec();
+            bind(&mut nested, slot, value.clone());
+            if self
+                .solve(body, candidate.clone(), &nested, depth + 1, output)?
+                .is_break()
+            {
+                return Ok(ControlFlow::Break(()));
+            }
+        }
+        Ok(ControlFlow::Continue(()))
+    }
+
+    /// A call of a user operator. Arguments that are assignable variables are
+    /// substituted into the body so the assignment can be solved; the rest are
+    /// evaluated and bound.
+    fn call(
+        &self,
+        operator: usize,
+        args: &[ExprId],
+        candidate: Partial,
+        locals: &[Option<Value>],
+        depth: usize,
+        output: &mut Output<'_>,
+    ) -> Flow {
+        let operator = self
+            .model
+            .program
+            .operators
+            .get(operator)
+            .ok_or_else(|| Error("invalid action operator".into()))?;
+        if operator.parameters.len() != args.len() {
+            return Err(Error("action operator arity mismatch".into()));
+        }
+        let mut nested = locals.to_vec();
+        let mut expanded = None;
+        let mut body = operator.body;
+        for (&slot, arg) in operator.parameters.iter().zip(args) {
+            if self
+                .model
+                .program
+                .assignment_variable(*arg, self.initial)
+                .is_some_and(|slot| candidate[slot].is_none())
+            {
+                let model = expanded.get_or_insert_with(|| self.model.clone());
+                body = model.program.replace_local(body, slot, *arg);
+            } else {
+                bind(&mut nested, slot, self.evaluate(*arg, &candidate, locals)?);
+            }
+        }
+        Generator {
+            model: expanded.as_ref().unwrap_or(self.model),
+            ..*self
+        }
+        .solve(body, candidate, &nested, depth + 1, output)
+    }
+
     fn apply_function(
         &self,
         function: ExprId,

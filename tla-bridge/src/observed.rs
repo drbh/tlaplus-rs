@@ -1,25 +1,55 @@
 //! Whole runs of the faithful checker and the observations parsed from them.
 
-use crate::{Answers, Mode, Outcome, RunEnv, RunOutcome, model, tool, values};
+use crate::{Answers, Mode, ModelError, Outcome, RunEnv, RunOutcome, model, tool, values};
 use std::collections::BTreeMap;
+use std::fmt;
 use tla_tlc_eval::mp::{self, Record};
 
-pub fn run_faithful(args: Vec<String>, env: RunEnv) -> Result<Answers, String> {
-    model::ensure_outside_session().map_err(|e| e.to_string())?;
+/// Why a faithful run could not be observed.
+#[derive(Debug)]
+pub enum ObserveError {
+    /// A faithful session was already active.
+    Session(ModelError),
+    /// The faithful port rejected features of the specification.
+    Unsupported(Vec<String>),
+    /// The run's messages could not be read as answers.
+    Oracle(tla_oracle::Error),
+    /// A recorded message lacks or mangles a parameter.
+    Record(String),
+}
+
+impl fmt::Display for ObserveError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Session(e) => e.fmt(f),
+            Self::Unsupported(features) => write!(f, "faithful port unsupported: {features:?}"),
+            Self::Oracle(e) => e.fmt(f),
+            Self::Record(e) => f.write_str(e),
+        }
+    }
+}
+
+impl std::error::Error for ObserveError {}
+
+impl From<tla_oracle::Error> for ObserveError {
+    fn from(e: tla_oracle::Error) -> Self {
+        Self::Oracle(e)
+    }
+}
+
+pub fn run_faithful(args: Vec<String>, env: RunEnv) -> Result<Answers, ObserveError> {
+    model::ensure_outside_session().map_err(ObserveError::Session)?;
     let outcome = tla_tlc::run(args, env);
     if !outcome.unsupported.is_empty() {
-        return Err(format!(
-            "faithful port unsupported: {:?}",
-            outcome.unsupported
-        ));
+        return Err(ObserveError::Unsupported(outcome.unsupported));
     }
-    tool::extract_records(
+    Ok(tool::extract_records(
         outcome
             .records
             .iter()
             .map(|r| (r.code, r.params.as_slice())),
         Some(outcome.exit_status),
-    )
+    )?)
 }
 
 pub use tla_oracle::{
@@ -29,8 +59,8 @@ pub use tla_oracle::{
 
 /// Like `run_faithful`, with named verdict evidence and full reported trace bodies.
 /// Unsupported features and unclassified failures remain visible in the result.
-pub fn observe_faithful(args: Vec<String>, env: RunEnv) -> Result<ObservedRun, String> {
-    crate::model::ensure_outside_session().map_err(|e| e.to_string())?;
+pub fn observe_faithful(args: Vec<String>, env: RunEnv) -> Result<ObservedRun, ObserveError> {
+    crate::model::ensure_outside_session().map_err(ObserveError::Session)?;
     let (outcome, captured) = tla_tlc::driver::run_inspected(args, env, |tool| {
         let model = tool.processed_spec();
         let inventory = [
@@ -68,7 +98,7 @@ pub fn observe_faithful(args: Vec<String>, env: RunEnv) -> Result<ObservedRun, S
     Ok(observed)
 }
 
-pub fn from_outcome(outcome: &RunOutcome) -> Result<ObservedRun, String> {
+pub fn from_outcome(outcome: &RunOutcome) -> Result<ObservedRun, ObserveError> {
     let mut summary = tool::extract_records(
         outcome
             .records
@@ -216,17 +246,19 @@ pub fn from_outcome(outcome: &RunOutcome) -> Result<ObservedRun, String> {
     })
 }
 
-fn parameter(record: &Record, index: usize) -> Result<&String, String> {
-    record
-        .params
-        .get(index)
-        .ok_or_else(|| format!("missing parameter {index} in record {}", record.code))
+fn parameter(record: &Record, index: usize) -> Result<&String, ObserveError> {
+    record.params.get(index).ok_or_else(|| {
+        ObserveError::Record(format!(
+            "missing parameter {index} in record {}",
+            record.code
+        ))
+    })
 }
 
-fn ordinal(record: &Record, index: usize) -> Result<i64, String> {
-    parameter(record, index)?
-        .parse()
-        .map_err(|_| format!("invalid state ordinal in record {}", record.code))
+fn ordinal(record: &Record, index: usize) -> Result<i64, ObserveError> {
+    parameter(record, index)?.parse().map_err(|_| {
+        ObserveError::Record(format!("invalid state ordinal in record {}", record.code))
+    })
 }
 
 fn finish_trace(current: &mut Option<Counterexample>, out: &mut Vec<Counterexample>) {

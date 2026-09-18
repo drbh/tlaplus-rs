@@ -103,35 +103,7 @@ impl Expr {
                 Box::new(eval(0)?),
                 Box::new(eval(1)?),
             ),
-            "rcup" | "rcap" | "rdiff" => {
-                let a = eval(0)?;
-                let b = eval(1)?;
-                if !matches!(a, Runtime::Set(_) | Runtime::Interval(..)) {
-                    return Err(Error::Type("reducible set").into());
-                }
-                if op == "rcup" {
-                    let mut values = match &a {
-                        Runtime::Set(v) => v.clone(),
-                        _ => a.enumerate(100_000)?,
-                    };
-                    for v in b.enumerate(100_000)? {
-                        if !a.contains(&v)? {
-                            values.push(v);
-                        }
-                    }
-                    return Ok(Runtime::Set(values));
-                }
-                let operation = Runtime::Binary(
-                    match op {
-                        "rcup" => SetOp::Union,
-                        "rcap" => SetOp::Intersection,
-                        _ => SetOp::Difference,
-                    },
-                    Box::new(a),
-                    Box::new(b),
-                );
-                Runtime::Set(operation.enumerate(100_000)?)
-            }
+            "rcup" | "rcap" | "rdiff" => reduce(op, eval(0)?, eval(1)?)?,
             "subset" => Runtime::Subsets {
                 base: Box::new(eval(0)?),
                 size: None,
@@ -141,33 +113,7 @@ impl Expr {
                 size: Some(args[0].atom().parse().unwrap()),
             },
             "union" => Runtime::Union(Box::new(eval(0)?)),
-            "unionf" => {
-                let base = eval(0)?;
-                if let Runtime::Set(sets) = &base
-                    && sets.iter().all(|s| matches!(s, Runtime::Set(_)))
-                {
-                    let mut values = Vec::<Runtime>::new();
-                    for set in sets {
-                        let Runtime::Set(members) = set else {
-                            unreachable!()
-                        };
-                        for v in members {
-                            let mut found = false;
-                            for previous in &values {
-                                if previous.semantic_eq(v)? {
-                                    found = true;
-                                    break;
-                                }
-                            }
-                            if !found {
-                                values.push(v.clone());
-                            }
-                        }
-                    }
-                    return Ok(Runtime::Set(values));
-                }
-                Runtime::Union(Box::new(base))
-            }
+            "unionf" => flatten_union(eval(0)?)?,
             "fcns" => Runtime::Functions {
                 domain: Box::new(eval(0)?),
                 range: Box::new(eval(1)?),
@@ -191,33 +137,7 @@ impl Expr {
             },
             "totup" => Runtime::tuple(eval(0)?.sequence()?),
             "tosetenum" => Runtime::Set(eval(0)?.enumerate(100_000)?),
-            "torcd" => {
-                let source = eval(0)?;
-                if let Runtime::Function {
-                    kind: FunctionKind::Record,
-                    ..
-                } = source
-                {
-                    return Ok(source);
-                }
-                if matches!(
-                    source,
-                    Runtime::Function {
-                        kind: FunctionKind::Interval(_),
-                        ..
-                    }
-                ) {
-                    return Err(Error::Type("record").into());
-                }
-                let entries = source.entries()?;
-                if entries.iter().any(|(k, _)| !matches!(k, Value::String(_))) {
-                    return Err(Error::Type("record").into());
-                }
-                Runtime::Function {
-                    kind: FunctionKind::Record,
-                    entries,
-                }
-            }
+            "torcd" => to_record(eval(0)?)?,
             "setpred" | "setpredt" => Runtime::Filter {
                 base: Box::new(eval(0)?),
                 excluded: Box::new(eval(1)?),
@@ -255,6 +175,92 @@ impl Expr {
         })
     }
 }
+/// `rcup`, `rcap` and `rdiff` reduce a set operation to an enumerated set.
+fn reduce(op: &str, a: Runtime, b: Runtime) -> Result<Runtime, Failure> {
+    if !matches!(a, Runtime::Set(_) | Runtime::Interval(..)) {
+        return Err(Error::Type("reducible set").into());
+    }
+    if op == "rcup" {
+        let mut values = match &a {
+            Runtime::Set(v) => v.clone(),
+            _ => a.enumerate(100_000)?,
+        };
+        for v in b.enumerate(100_000)? {
+            if !a.contains(&v)? {
+                values.push(v);
+            }
+        }
+        return Ok(Runtime::Set(values));
+    }
+    let operation = Runtime::Binary(
+        match op {
+            "rcup" => SetOp::Union,
+            "rcap" => SetOp::Intersection,
+            _ => SetOp::Difference,
+        },
+        Box::new(a),
+        Box::new(b),
+    );
+    Ok(Runtime::Set(operation.enumerate(100_000)?))
+}
+
+/// `unionf` flattens a set of enumerated sets without duplicates, and falls
+/// back to the lazy union otherwise.
+fn flatten_union(base: Runtime) -> Result<Runtime, Failure> {
+    if let Runtime::Set(sets) = &base
+        && sets.iter().all(|s| matches!(s, Runtime::Set(_)))
+    {
+        let mut values = Vec::<Runtime>::new();
+        for set in sets {
+            let Runtime::Set(members) = set else {
+                unreachable!()
+            };
+            for v in members {
+                let mut found = false;
+                for previous in &values {
+                    if previous.semantic_eq(v)? {
+                        found = true;
+                        break;
+                    }
+                }
+                if !found {
+                    values.push(v.clone());
+                }
+            }
+        }
+        return Ok(Runtime::Set(values));
+    }
+    Ok(Runtime::Union(Box::new(base)))
+}
+
+/// `torcd` views a function with string keys as a record.
+fn to_record(source: Runtime) -> Result<Runtime, Failure> {
+    if let Runtime::Function {
+        kind: FunctionKind::Record,
+        ..
+    } = source
+    {
+        return Ok(source);
+    }
+    if matches!(
+        source,
+        Runtime::Function {
+            kind: FunctionKind::Interval(_),
+            ..
+        }
+    ) {
+        return Err(Error::Type("record").into());
+    }
+    let entries = source.entries()?;
+    if entries.iter().any(|(k, _)| !matches!(k, Value::String(_))) {
+        return Err(Error::Type("record").into());
+    }
+    Ok(Runtime::Function {
+        kind: FunctionKind::Record,
+        entries,
+    })
+}
+
 pub fn parse(text: &str) -> Vec<Expr> {
     fn node(bytes: &[u8], cursor: &mut usize) -> Expr {
         while bytes[*cursor].is_ascii_whitespace() {

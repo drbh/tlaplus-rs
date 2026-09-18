@@ -1,3 +1,6 @@
+//! Mutable state TLC exposes to specifications: `TLCSet`/`TLCGet` registers,
+//! memoization caches and the string intern table, with the snapshots that
+//! let worker threads start from one setup.
 use std::{
     collections::BTreeMap,
     num::NonZeroUsize,
@@ -8,6 +11,64 @@ use std::{
 };
 use tla_value_expr::Expr;
 use tla_values::Value;
+
+/// Why a register or cache operation failed. TLC's own messages are kept
+/// verbatim, because specifications observe them through `TLCGet`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Error {
+    /// A lock on the registers or a cache was poisoned by a panicking thread.
+    Poisoned(&'static str),
+    /// Setup was used out of order.
+    Setup(&'static str),
+    /// Workers ended setup with different registers.
+    SetupMismatch,
+    /// `TLCGet` of a register that was never set.
+    Undefined(String),
+    /// A runtime key this checker does not provide.
+    UnsupportedKey(String),
+    /// `TLCSet` outside a running checker.
+    Inactive,
+    InvalidCacheMetadata,
+    /// An error message exactly as TLC reports it.
+    Tlc(String),
+    Value(tla_values::Error),
+    /// The expression a cache was asked to evaluate failed.
+    Evaluation(tla_library::Error),
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Poisoned(what) => write!(f, "{what} poisoned"),
+            Self::Setup(what) => f.write_str(what),
+            Self::SetupMismatch => f.write_str("setup registers differ between workers"),
+            Self::Undefined(name) => write!(f, "TLCGet({name}) was undefined."),
+            Self::UnsupportedKey(name) => write!(f, "unsupported TLCGet runtime key: {name}"),
+            Self::Inactive => f.write_str("TLCSet requires an active checker"),
+            Self::InvalidCacheMetadata => f.write_str("invalid cache metadata"),
+            Self::Tlc(message) => f.write_str(message),
+            Self::Value(e) => e.fmt(f),
+            Self::Evaluation(e) => e.fmt(f),
+        }
+    }
+}
+
+impl std::error::Error for Error {}
+
+impl From<tla_values::Error> for Error {
+    fn from(e: tla_values::Error) -> Self {
+        Self::Value(e)
+    }
+}
+
+impl From<Error> for tla_library::Error {
+    fn from(e: Error) -> Self {
+        match e {
+            Error::Evaluation(e) => e,
+            other => Self(other.to_string()),
+        }
+    }
+}
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 enum Key {
@@ -41,40 +102,47 @@ impl Clone for Registers {
     }
 }
 
-fn rendered(value: &Value) -> Result<String, String> {
-    tla_library::stringify(&Expr::atom(value.clone())).map_err(|e| e.to_string())
+fn rendered(value: &Value) -> Result<String, Error> {
+    Ok(tla_library::stringify(&Expr::atom(value.clone()))?)
 }
 
-fn key(value: &Value, operation: &str) -> Result<Key, String> {
+fn key(value: &Value, operation: &str) -> Result<Key, Error> {
     match value {
         Value::Int(index) if *index >= 0 => Ok(Key::Index(*index)),
         Value::String(name) if name.text.starts_with("s:") => Ok(Key::Named(name.text.to_string())),
-        _ => Err(format!(
+        _ => Err(Error::Tlc(format!(
             "The {}argument of {operation} should be a nonnegative integer, but instead it is:\n{}",
             if operation == "TLCSet" { "first " } else { "" },
             rendered(value)?
-        )),
+        ))),
     }
 }
 
 impl Registers {
-    pub fn seed(&mut self, values: impl IntoIterator<Item = (Value, Value)>) -> Result<(), String> {
+    pub fn seed(&mut self, values: impl IntoIterator<Item = (Value, Value)>) -> Result<(), Error> {
         self.begin_setup(NonZeroUsize::MIN)?;
         for (key, value) in values {
             self.set(None, &key, value)?;
         }
         self.capture_setup()
     }
-    pub fn begin_setup(&mut self, workers: NonZeroUsize) -> Result<(), String> {
+    pub fn begin_setup(&mut self, workers: NonZeroUsize) -> Result<(), Error> {
         self.initial = SetupSnapshot::default();
         self.start(workers)
     }
-    pub fn capture_setup(&mut self) -> Result<(), String> {
-        let workers = self.workers.lock().map_err(|_| "registers poisoned")?;
-        let workers = workers.as_ref().ok_or("register setup has not started")?;
-        let first = workers.first().ok_or("register setup has no workers")?;
+    pub fn capture_setup(&mut self) -> Result<(), Error> {
+        let workers = self
+            .workers
+            .lock()
+            .map_err(|_| Error::Poisoned("registers"))?;
+        let workers = workers
+            .as_ref()
+            .ok_or(Error::Setup("register setup has not started"))?;
+        let first = workers
+            .first()
+            .ok_or(Error::Setup("register setup has no workers"))?;
         if workers.iter().any(|worker| worker != first) {
-            return Err("setup registers differ between workers".into());
+            return Err(Error::SetupMismatch);
         }
         self.initial = SetupSnapshot(first.clone());
         Ok(())
@@ -89,9 +157,12 @@ impl Registers {
         self.configured_workers
             .store(workers.get(), Ordering::Relaxed);
     }
-    pub fn reset(&self) -> Result<(), String> {
+    pub fn reset(&self) -> Result<(), Error> {
         let workers = self.configured_workers.load(Ordering::Relaxed).max(1);
-        *self.workers.lock().map_err(|_| "registers poisoned")? =
+        *self
+            .workers
+            .lock()
+            .map_err(|_| Error::Poisoned("registers"))? =
             Some(vec![self.initial.0.clone(); workers]);
         Ok(())
     }
@@ -100,19 +171,22 @@ impl Registers {
         worker: Option<usize>,
         argument: &Value,
         default: Value,
-    ) -> Result<Value, String> {
+    ) -> Result<Value, Error> {
         let key = match argument {
             Value::Int(index) => Key::Index(*index),
             Value::String(name) if name.text.starts_with("s:") => Key::Named(name.text.to_string()),
             _ => return Ok(default),
         };
-        let workers = self.workers.lock().map_err(|_| "registers poisoned")?;
+        let workers = self
+            .workers
+            .lock()
+            .map_err(|_| Error::Poisoned("registers"))?;
         let Some(workers) = workers.as_ref() else {
             return Ok(default);
         };
         let registers = workers
             .get(worker.unwrap_or(0))
-            .ok_or("invalid register worker")?;
+            .ok_or(Error::Setup("invalid register worker"))?;
         if let Key::Index(index) = key
             && index < 0
         {
@@ -125,37 +199,40 @@ impl Registers {
                 .max()
                 .unwrap_or(4)
                 .max(4);
-            return Err(format!(
+            return Err(Error::Tlc(format!(
                 "java.lang.ArrayIndexOutOfBoundsException: Index {index} out of bounds for length {length}"
-            ));
+            )));
         }
         Ok(registers
             .get(&key)
             .map(|entry| entry.value.clone())
             .unwrap_or(default))
     }
-    pub fn start(&self, workers: NonZeroUsize) -> Result<(), String> {
+    pub fn start(&self, workers: NonZeroUsize) -> Result<(), Error> {
         self.configure(workers);
-        *self.workers.lock().map_err(|_| "registers poisoned")? =
+        *self
+            .workers
+            .lock()
+            .map_err(|_| Error::Poisoned("registers"))? =
             Some(vec![BTreeMap::new(); workers.get()]);
         Ok(())
     }
 
     /// Publishes checker statistics (`"distinct"`, `"stats"`, ...) for `TLCGet`.
-    pub fn publish(&self, statistics: BTreeMap<String, Value>) -> Result<(), String> {
+    pub fn publish(&self, statistics: BTreeMap<String, Value>) -> Result<(), Error> {
         self.statistics
             .lock()
-            .map_err(|_| "registers poisoned")?
+            .map_err(|_| Error::Poisoned("registers"))?
             .extend(statistics);
         Ok(())
     }
 
-    pub fn get(&self, worker: Option<usize>, argument: &Value) -> Result<Value, String> {
+    pub fn get(&self, worker: Option<usize>, argument: &Value) -> Result<Value, Error> {
         if let Value::String(name) = argument
             && let Some(value) = self
                 .statistics
                 .lock()
-                .map_err(|_| "registers poisoned")?
+                .map_err(|_| Error::Poisoned("registers"))?
                 .get(name.text.as_ref())
         {
             return Ok(value.clone());
@@ -184,18 +261,21 @@ impl Registers {
                         | "stats"
                 ) || name.text.starts_with("-D")
                 {
-                    format!("unsupported TLCGet runtime key: {}", name.text)
+                    Error::UnsupportedKey(name.text.to_string())
                 } else {
-                    format!("TLCGet({}) was undefined.", name.text)
+                    Error::Undefined(name.text.to_string())
                 },
             );
         }
         let key = key(argument, "TLCGet")?;
-        let workers = self.workers.lock().map_err(|_| "registers poisoned")?;
+        let workers = self
+            .workers
+            .lock()
+            .map_err(|_| Error::Poisoned("registers"))?;
         if let Some(workers) = workers.as_ref() {
             let registers = workers
                 .get(worker.unwrap_or(0))
-                .ok_or("invalid register worker")?;
+                .ok_or(Error::Setup("invalid register worker"))?;
             if let Some(value) = registers.get(&key) {
                 return Ok(value.value.clone());
             }
@@ -204,17 +284,17 @@ impl Registers {
             Key::Index(index) => index.to_string(),
             Key::Named(name) => name,
         };
-        Err(format!("TLCGet({name}) was undefined."))
+        Err(Error::Undefined(name))
     }
 
-    fn all(&self, named: bool) -> Result<Value, String> {
-        let workers = self.workers.lock().map_err(|_| "registers poisoned")?;
-        let workers = workers.as_ref().ok_or_else(|| {
-            format!(
-                "TLCGet({}) was undefined.",
-                if named { "all:named" } else { "all" }
-            )
-        })?;
+    fn all(&self, named: bool) -> Result<Value, Error> {
+        let workers = self
+            .workers
+            .lock()
+            .map_err(|_| Error::Poisoned("registers"))?;
+        let workers = workers
+            .as_ref()
+            .ok_or_else(|| Error::Undefined(if named { "all:named" } else { "all" }.into()))?;
         let mut entries = Vec::new();
         if let Some(first) = workers.first() {
             for (key, entry) in first {
@@ -227,13 +307,13 @@ impl Registers {
                         worker
                             .get(key)
                             .map(|entry| entry.value.clone())
-                            .ok_or_else(|| "java.lang.NullPointerException".to_owned())
+                            .ok_or_else(|| Error::Tlc("java.lang.NullPointerException".into()))
                     })
                     .collect::<Result<Vec<_>, _>>()?;
                 entries.push((entry.key.clone(), Value::tuple(values)));
             }
         }
-        Value::function(entries).map_err(|e| e.to_string())
+        Ok(Value::function(entries)?)
     }
 
     pub fn set(
@@ -241,25 +321,28 @@ impl Registers {
         worker: Option<usize>,
         argument: &Value,
         value: Value,
-    ) -> Result<Value, String> {
+    ) -> Result<Value, Error> {
         if let Value::String(name) = argument
             && (matches!(name.text.as_ref(), "exit" | "pause") || name.text.starts_with("-D"))
         {
             return Ok(Value::Bool(true));
         }
         let key = key(argument, "TLCSet")?;
-        let mut workers = self.workers.lock().map_err(|_| "registers poisoned")?;
+        let mut workers = self
+            .workers
+            .lock()
+            .map_err(|_| Error::Poisoned("registers"))?;
         let Some(workers) = workers.as_mut() else {
             return if matches!(key, Key::Named(_)) {
                 Ok(Value::Bool(true))
             } else {
-                Err("TLCSet requires an active checker".into())
+                Err(Error::Inactive)
             };
         };
         if let Some(worker) = worker {
             workers
                 .get_mut(worker)
-                .ok_or("invalid register worker")?
+                .ok_or(Error::Setup("invalid register worker"))?
                 .insert(
                     key,
                     Entry {
@@ -291,32 +374,30 @@ impl Cache {
         metadata: &Value,
         key: Value,
         polynomial: u64,
-        evaluate: impl FnOnce() -> Result<Value, String>,
-    ) -> Result<Value, String> {
-        let metadata = metadata.sequence().map_err(|e| e.to_string())?;
+        evaluate: impl FnOnce() -> Result<Value, tla_library::Error>,
+    ) -> Result<Value, Error> {
+        let metadata = metadata.sequence()?;
         let [Value::Int(site), seed] = metadata.as_slice() else {
-            return Err("invalid cache metadata".into());
+            return Err(Error::InvalidCacheMetadata);
         };
         let site = *site;
-        let seed = seed.entries().map_err(|e| e.to_string())?;
+        let seed = seed.entries()?;
         let hash = |value: &Value| {
             let fp = value.extend_fingerprint(polynomial, polynomial);
             (fp >> 32) as u32 ^ fp as u32
         };
         {
-            let mut entries = self.0.lock().map_err(|_| "cache poisoned")?;
+            let mut entries = self.0.lock().map_err(|_| Error::Poisoned("cache"))?;
             for (stored, value) in entries.entry(site).or_insert_with(|| seed.to_vec()).iter() {
-                if hash(stored) == hash(&key)
-                    && stored.semantic_eq(&key).map_err(|e| e.to_string())?
-                {
+                if hash(stored) == hash(&key) && stored.semantic_eq(&key)? {
                     return Ok(value.clone());
                 }
             }
         }
-        let value = evaluate()?;
+        let value = evaluate().map_err(Error::Evaluation)?;
         self.0
             .lock()
-            .map_err(|_| "cache poisoned")?
+            .map_err(|_| Error::Poisoned("cache"))?
             .entry(site)
             .or_default()
             .push((key, value.clone()));
@@ -342,24 +423,34 @@ impl Clone for Caches {
 }
 
 impl Caches {
-    pub fn checkpoint(&self) -> Result<Self, String> {
-        let initial = self.active.0.lock().map_err(|_| "cache poisoned")?.clone();
+    pub fn checkpoint(&self) -> Result<Self, Error> {
+        let initial = self
+            .active
+            .0
+            .lock()
+            .map_err(|_| Error::Poisoned("cache"))?
+            .clone();
         Ok(Self {
             setup: initial.clone(),
             active: std::sync::Arc::new(Cache(Mutex::new(initial.clone()))),
             initial,
         })
     }
-    pub fn begin_setup(&self) -> Result<(), String> {
-        *self.active.0.lock().map_err(|_| "cache poisoned")? = self.setup.clone();
+    pub fn begin_setup(&self) -> Result<(), Error> {
+        *self.active.0.lock().map_err(|_| Error::Poisoned("cache"))? = self.setup.clone();
         Ok(())
     }
-    pub fn reset(&self) -> Result<(), String> {
-        *self.active.0.lock().map_err(|_| "cache poisoned")? = self.initial.clone();
+    pub fn reset(&self) -> Result<(), Error> {
+        *self.active.0.lock().map_err(|_| Error::Poisoned("cache"))? = self.initial.clone();
         Ok(())
     }
-    pub fn capture_setup(&mut self) -> Result<(), String> {
-        self.initial = self.active.0.lock().map_err(|_| "cache poisoned")?.clone();
+    pub fn capture_setup(&mut self) -> Result<(), Error> {
+        self.initial = self
+            .active
+            .0
+            .lock()
+            .map_err(|_| Error::Poisoned("cache"))?
+            .clone();
         Ok(())
     }
 }

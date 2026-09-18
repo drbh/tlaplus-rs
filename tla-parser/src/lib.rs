@@ -1,3 +1,5 @@
+//! Parsing with the tree-sitter TLA+ grammar, converted into the trees of
+//! `tla-syntax`. [`parse`] checks a source text; [`module`] builds a module.
 mod binders;
 mod expressions;
 mod modules;

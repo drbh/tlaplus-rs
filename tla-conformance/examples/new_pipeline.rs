@@ -217,10 +217,10 @@ fn measure(request: Request) -> Result<Measurement, String> {
                     values: node.state.detached_values()?,
                     depth: node.depth,
                 })
-                .map_err(|message| tla_bridge::model::ModelError {
+                .map_err(|error| tla_bridge::model::ModelError {
                     stage: tla_bridge::model::Stage::InspectState,
                     code: None,
-                    message,
+                    message: error.to_string(),
                 })?;
             samples.push((bytes, successors));
         }

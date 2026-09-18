@@ -510,7 +510,9 @@ impl Model {
 }
 
 impl Model {
-    #[rustfmt::skip]    pub fn random_state(&self) -> u64 { tla_tlc_value::random::with_random(|random| random.seed_state()) }
+    pub fn random_state(&self) -> u64 {
+        tla_tlc_value::random::with_random(|random| random.seed_state())
+    }
 
     pub(crate) fn capture_setup(&self) {
         self.initial_context.replace(self.tool.runtime_snapshot());

@@ -12,7 +12,7 @@ pub mod observed;
 pub mod values;
 
 pub use model::{Model, ModelError, with_loaded_model, with_model, with_register_model};
-pub use observed::{from_outcome, observe_faithful, run_faithful};
+pub use observed::{ObserveError, from_outcome, observe_faithful, run_faithful};
 pub use tla_oracle::ModelRequest;
 pub use tla_oracle::{Answers, Comparison, Difference, Mode, Outcome, compare, corpus, tool};
 pub use tla_oracle::{ErrorCategory, ObservedRun, PropertyKind, TraceEnd, Verdict};
