@@ -1,7 +1,7 @@
 use std::{convert::Infallible, num::NonZeroUsize};
+use tla_disk::store::Store;
 use tla_disk::{Codec, ValueCodec};
 use tla_engine::{Completion, Options, Transition, TransitionSystem, ViolationKind};
-use tla_store::Store;
 use tla_values::Value;
 
 struct Graph {

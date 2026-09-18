@@ -1,5 +1,6 @@
+mod constants;
 mod generate;
-pub use tla_constants::materialize as materialize_constants;
+pub use constants::materialize as materialize_constants;
 use tla_engine::{Transition, TransitionSystem};
 use tla_eval::{BooleanContext, Evaluator};
 pub use tla_eval::{Error, Value, literal};
@@ -8,15 +9,30 @@ use tla_ir::{ExprId, Program};
 pub type State = tla_engine::Leveled<Vec<Value>>;
 #[derive(Clone, Debug)]
 pub struct BoundModel {
+    pub program: Program,
+    pub constants: Vec<Value>,
+    pub runtime: Runtime,
+    pub checks: Checks,
+}
+
+/// Mutable state the evaluator keeps across a run: TLC registers and caches,
+/// random streams, the string table and the clock.
+#[derive(Clone, Debug)]
+pub struct Runtime {
     pub caches: tla_eval::Caches,
     pub registers: tla_eval::Registers,
     pub randomized: bool,
     pub random: tla_eval::RandomSessions,
     pub started: std::time::Instant,
     pub strings: tla_eval::Strings,
-    pub program: Program,
-    pub constants: Vec<Value>,
+}
+
+/// What a configuration asks the checker to explore and verify, as
+/// expressions of the model's program.
+#[derive(Clone, Debug)]
+pub struct Checks {
     pub init: Vec<ExprId>,
+    /// The next-state relation split into named actions.
     pub actions: Vec<(String, ExprId)>,
     pub invariants: Vec<(String, ExprId)>,
     pub initial_properties: Vec<(String, ExprId)>,
@@ -28,6 +44,25 @@ pub struct BoundModel {
     pub view: Option<ExprId>,
     pub symmetry: Vec<Vec<(Value, Value)>>,
     pub check_deadlock: bool,
+}
+
+impl Default for Checks {
+    fn default() -> Self {
+        Self {
+            init: vec![],
+            actions: vec![],
+            invariants: vec![],
+            initial_properties: vec![],
+            action_properties: vec![],
+            temporal_properties: vec![],
+            temporal_assumptions: vec![],
+            state_constraints: vec![],
+            action_constraints: vec![],
+            view: None,
+            symmetry: vec![],
+            check_deadlock: true,
+        }
+    }
 }
 impl BoundModel {
     pub(crate) fn boolean(
@@ -49,13 +84,13 @@ impl BoundModel {
             &self.constants,
             current,
             next,
-            self.strings.clone(),
-            self.caches.active.clone(),
+            self.runtime.strings.clone(),
+            self.runtime.caches.active.clone(),
         );
-        evaluator.registers = Some(&self.registers);
+        evaluator.registers = Some(&self.runtime.registers);
         evaluator.worker = rayon::current_thread_index();
         evaluator.level = level;
-        evaluator.started = self.started;
+        evaluator.started = self.runtime.started;
         evaluator.intern_new_strings = evaluator.worker.is_none();
         evaluator
     }
@@ -64,17 +99,17 @@ impl BoundModel {
         assumptions: &[ExprId],
         workers: std::num::NonZeroUsize,
     ) -> Result<Option<usize>, Error> {
-        self.registers.begin_setup(workers).map_err(Error)?;
-        self.random.begin_setup();
-        self.caches.begin_setup().map_err(Error)?;
+        self.runtime.registers.begin_setup(workers).map_err(Error)?;
+        self.runtime.random.begin_setup();
+        self.runtime.caches.begin_setup().map_err(Error)?;
         for (index, expression) in assumptions.iter().enumerate() {
             if !self.evaluate(*expression, &[], &[])?.boolean()? {
                 return Ok(Some(index));
             }
         }
-        self.registers.capture_setup().map_err(Error)?;
-        self.caches.capture_setup().map_err(Error)?;
-        self.random.capture_setup()?;
+        self.runtime.registers.capture_setup().map_err(Error)?;
+        self.runtime.caches.capture_setup().map_err(Error)?;
+        self.runtime.random.capture_setup()?;
         Ok(None)
     }
     pub(crate) fn complete_values(&self, values: Vec<Option<Value>>) -> Result<Vec<Value>, Error> {
@@ -98,26 +133,17 @@ impl BoundModel {
     }
     pub fn new(program: Program) -> Self {
         Self {
-            caches: tla_eval::Caches::default(),
-            registers: tla_eval::Registers::default(),
-            randomized: program.uses_random(0..program.nodes.len()),
-            random: tla_eval::RandomSessions::new(1, tla_eval::Random::new(1)),
-            started: std::time::Instant::now(),
-            strings: std::sync::Arc::new(std::sync::Mutex::new(program.strings.clone())),
+            runtime: Runtime {
+                caches: tla_eval::Caches::default(),
+                registers: tla_eval::Registers::default(),
+                randomized: program.uses_random(0..program.nodes.len()),
+                random: tla_eval::RandomSessions::new(1, tla_eval::Random::new(1)),
+                started: std::time::Instant::now(),
+                strings: std::sync::Arc::new(std::sync::Mutex::new(program.strings.clone())),
+            },
             program,
             constants: vec![],
-            init: vec![],
-            actions: vec![],
-            invariants: vec![],
-            initial_properties: vec![],
-            action_properties: vec![],
-            temporal_properties: vec![],
-            temporal_assumptions: vec![],
-            state_constraints: vec![],
-            action_constraints: vec![],
-            view: None,
-            symmetry: vec![],
-            check_deadlock: true,
+            checks: Checks::default(),
         }
     }
     pub fn bind_constants(&mut self, bindings: &[(usize, ExprId)]) -> Result<(), Error> {
@@ -128,8 +154,8 @@ impl BoundModel {
         bindings: &[(usize, ExprId)],
         overrides: &[(usize, ExprId)],
     ) -> Result<(), Error> {
-        let random = self.random.current()?;
-        let values = tla_constants::configure(
+        let random = self.runtime.random.current()?;
+        let values = constants::configure(
             &mut self.program,
             bindings,
             overrides,
@@ -139,18 +165,18 @@ impl BoundModel {
                     values,
                     &[],
                     &[],
-                    self.strings.clone(),
-                    self.caches.active.clone(),
+                    self.runtime.strings.clone(),
+                    self.runtime.caches.active.clone(),
                 );
                 evaluator.random = Some(&random);
-                evaluator.started = self.started;
+                evaluator.started = self.runtime.started;
                 evaluator.level = 0;
                 evaluator.evaluate(expression)
             },
         )?;
         self.set_constants(values)?;
-        self.random = self.random.checkpoint()?;
-        self.caches = self.caches.checkpoint().map_err(Error)?;
+        self.runtime.random = self.runtime.random.checkpoint()?;
+        self.runtime.caches = self.runtime.caches.checkpoint().map_err(Error)?;
         Ok(())
     }
     pub fn cache_constants(&mut self, operators: std::ops::Range<usize>) -> Result<(), Error> {
@@ -182,12 +208,13 @@ impl BoundModel {
                 self.program.operators[index].body = body;
             }
         }
-        self.random = self.random.checkpoint()?;
-        self.caches = self.caches.checkpoint().map_err(Error)?;
+        self.runtime.random = self.runtime.random.checkpoint()?;
+        self.runtime.caches = self.runtime.caches.checkpoint().map_err(Error)?;
         Ok(())
     }
     pub fn set_constants(&mut self, constants: Vec<Value>) -> Result<(), Error> {
         let mut strings = self
+            .runtime
             .strings
             .lock()
             .map_err(|_| Error("string intern table poisoned".into()))?;
@@ -217,18 +244,18 @@ impl BoundModel {
         let mut published = std::collections::BTreeMap::new();
         for (name, count) in counts.into_iter().chain([("duration", 0), ("worker", 0)]) {
             let key =
-                tla_runtime::intern_string(&self.strings, name.into(), true).map_err(Error)?;
+                tla_eval::intern_string(&self.runtime.strings, name.into(), true).map_err(Error)?;
             fields.push((key, int(count)));
             published.insert(name.to_owned(), int(count));
         }
         published.insert("stats".into(), Value::function(fields)?);
-        self.registers.publish(published).map_err(Error)
+        self.runtime.registers.publish(published).map_err(Error)
     }
     /// Publishes `_POSSIBLE` counts as TLC's `_Possible` module reads them:
     /// `TLCGet("all:named")["s:_possible"]`, one record per worker.
     pub fn publish_possible(&self, counts: &[(String, usize)]) -> Result<(), Error> {
         let string = |text: &str| {
-            tla_runtime::intern_string(&self.strings, text.into(), true).map_err(Error)
+            tla_eval::intern_string(&self.runtime.strings, text.into(), true).map_err(Error)
         };
         let fields = counts
             .iter()
@@ -242,19 +269,19 @@ impl BoundModel {
         let workers = Value::tuple(vec![Value::function(fields)?]);
         let registers = Value::function(vec![(string("s:_possible")?, workers)])?;
         let published = std::collections::BTreeMap::from([("all:named".to_owned(), registers)]);
-        self.registers.publish(published).map_err(Error)
+        self.runtime.registers.publish(published).map_err(Error)
     }
     /// Seeds random operators as TLC's `-seed` does before any evaluation.
     pub fn seed(&mut self, seed: i64) {
-        self.random = tla_eval::RandomSessions::new(seed, tla_eval::Random::new(seed));
+        self.runtime.random = tla_eval::RandomSessions::new(seed, tla_eval::Random::new(seed));
     }
     pub fn set_random_seed(&mut self, seed: i64, state: u64) -> Result<(), Error> {
-        self.random =
+        self.runtime.random =
             tla_eval::RandomSessions::new(seed, tla_eval::Random::from_seed_state(state)?);
         Ok(())
     }
     fn begin_successors(&self, state: &State) -> Result<(), Error> {
-        if !self.randomized {
+        if !self.runtime.randomized {
             return Ok(());
         }
         let polynomial = self
@@ -264,7 +291,7 @@ impl BoundModel {
         let fingerprint = self.key(state)?.iter().fold(polynomial, |fp, value| {
             value.extend_fingerprint(fp, polynomial)
         });
-        Ok(self.random.begin(Some(fingerprint))?)
+        Ok(self.runtime.random.begin(Some(fingerprint))?)
     }
     pub fn evaluate(&self, id: ExprId, state: &[Value], next: &[Value]) -> Result<Value, Error> {
         self.evaluate_at(id, state, next, usize::from(!state.is_empty()))
@@ -305,20 +332,22 @@ impl BoundModel {
     }
     fn uses_registers(&self) -> bool {
         self.program.uses_builtins(
-            self.init
+            self.checks
+                .init
                 .iter()
                 .copied()
                 .chain(
-                    self.actions
+                    self.checks
+                        .actions
                         .iter()
-                        .chain(&self.invariants)
-                        .chain(&self.initial_properties)
-                        .chain(&self.action_properties)
+                        .chain(&self.checks.invariants)
+                        .chain(&self.checks.initial_properties)
+                        .chain(&self.checks.action_properties)
                         .map(|(_, id)| *id),
                 )
-                .chain(self.state_constraints.iter().copied())
-                .chain(self.action_constraints.iter().copied())
-                .chain(self.view),
+                .chain(self.checks.state_constraints.iter().copied())
+                .chain(self.checks.action_constraints.iter().copied())
+                .chain(self.checks.view),
             &[tla_ir::Builtin::TlcSet],
         )
     }
@@ -328,7 +357,7 @@ impl TransitionSystem for BoundModel {
     type Key = Vec<Value>;
     type Error = Error;
     fn prepare_parallel(&self, workers: std::num::NonZeroUsize) -> Result<(), Error> {
-        self.registers.configure(workers);
+        self.runtime.registers.configure(workers);
         Ok(())
     }
     fn parallel_callbacks(&self) -> bool {
@@ -337,29 +366,30 @@ impl TransitionSystem for BoundModel {
     fn prefetch_successors(&self) -> bool {
         !self.uses_registers()
             && !self.program.uses_random(
-                self.invariants
+                self.checks
+                    .invariants
                     .iter()
-                    .chain(&self.initial_properties)
-                    .chain(&self.action_properties)
+                    .chain(&self.checks.initial_properties)
+                    .chain(&self.checks.action_properties)
                     .map(|(_, id)| *id)
-                    .chain(self.state_constraints.iter().copied())
-                    .chain(self.action_constraints.iter().copied())
-                    .chain(self.view),
+                    .chain(self.checks.state_constraints.iter().copied())
+                    .chain(self.checks.action_constraints.iter().copied())
+                    .chain(self.checks.view),
             )
     }
     fn initial_states(&self) -> Result<Vec<State>, Error> {
-        self.registers.reset().map_err(Error)?;
-        self.caches.reset().map_err(Error)?;
-        self.random.begin(None)?;
-        if self.init.is_empty() && self.program.variables.is_empty() {
+        self.runtime.registers.reset().map_err(Error)?;
+        self.runtime.caches.reset().map_err(Error)?;
+        self.runtime.random.begin(None)?;
+        if self.checks.init.is_empty() && self.program.variables.is_empty() {
             return Ok(Vec::new());
         }
-        states(self, &self.init, &Vec::new().into(), true)
+        states(self, &self.checks.init, &Vec::new().into(), true)
     }
     fn successors(&self, state: &State) -> Result<Vec<Transition<State>>, Error> {
         self.begin_successors(state)?;
         let mut transitions = Vec::new();
-        for (action, (_, predicate)) in self.actions.iter().enumerate() {
+        for (action, (_, predicate)) in self.checks.actions.iter().enumerate() {
             transitions.extend(
                 states(self, &[*predicate], state, false)?
                     .into_iter()
@@ -372,13 +402,13 @@ impl TransitionSystem for BoundModel {
         &self,
         output: &mut impl FnMut(State) -> Result<std::ops::ControlFlow<()>, Error>,
     ) -> Result<std::ops::ControlFlow<()>, Error> {
-        self.registers.reset().map_err(Error)?;
-        self.caches.reset().map_err(Error)?;
-        self.random.begin(None)?;
-        if self.init.is_empty() && self.program.variables.is_empty() {
+        self.runtime.registers.reset().map_err(Error)?;
+        self.runtime.caches.reset().map_err(Error)?;
+        self.runtime.random.begin(None)?;
+        if self.checks.init.is_empty() && self.program.variables.is_empty() {
             return Ok(std::ops::ControlFlow::Continue(()));
         }
-        generate::visit(self, &self.init, &Vec::new().into(), true, output)
+        generate::visit(self, &self.checks.init, &Vec::new().into(), true, output)
     }
     fn visit_successors(
         &self,
@@ -386,7 +416,7 @@ impl TransitionSystem for BoundModel {
         output: &mut impl FnMut(Transition<State>) -> Result<std::ops::ControlFlow<()>, Error>,
     ) -> Result<std::ops::ControlFlow<()>, Error> {
         self.begin_successors(state)?;
-        for (action, (_, predicate)) in self.actions.iter().enumerate() {
+        for (action, (_, predicate)) in self.checks.actions.iter().enumerate() {
             if generate::visit(self, &[*predicate], state, false, &mut |state| {
                 output(Transition { action, state })
             })?
@@ -399,7 +429,7 @@ impl TransitionSystem for BoundModel {
     }
     fn key(&self, state: &State) -> Result<Vec<Value>, Error> {
         let mut canonical = state.values.clone();
-        for permutation in &self.symmetry {
+        for permutation in &self.checks.symmetry {
             let candidate = state
                 .iter()
                 .map(|v| permute(v, permutation))
@@ -416,7 +446,7 @@ impl TransitionSystem for BoundModel {
                 canonical = candidate;
             }
         }
-        match self.view {
+        match self.checks.view {
             Some(view) => Ok(vec![self.evaluate_at(
                 view,
                 &canonical,
@@ -430,19 +460,19 @@ impl TransitionSystem for BoundModel {
         Ok(a == b && a.depth == b.depth)
     }
     fn state_allowed(&self, state: &State) -> Result<bool, Error> {
-        self.allowed(&self.state_constraints, state, &[])
+        self.allowed(&self.checks.state_constraints, state, &[])
     }
     fn step_allowed(&self, state: &State, next: &State) -> Result<bool, Error> {
-        self.allowed(&self.action_constraints, state, next)
+        self.allowed(&self.checks.action_constraints, state, next)
     }
     fn invariant(&self, state: &State) -> Result<Option<String>, Error> {
-        self.failure(&self.invariants, state, &[])
+        self.failure(&self.checks.invariants, state, &[])
     }
     fn initial_property(&self, state: &State) -> Result<Option<String>, Error> {
-        self.failure(&self.initial_properties, state, &[])
+        self.failure(&self.checks.initial_properties, state, &[])
     }
     fn action_property(&self, state: &State, next: &State) -> Result<Option<String>, Error> {
-        self.failure(&self.action_properties, state, next)
+        self.failure(&self.checks.action_properties, state, next)
     }
 }
 fn permute(value: &Value, permutation: &[(Value, Value)]) -> Result<Value, Error> {

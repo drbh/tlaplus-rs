@@ -3,6 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 mod config;
+pub mod temporal;
 pub use config::{Config, config, embedded_config, override_operators};
 use tla_syntax::{Expr, Module};
 

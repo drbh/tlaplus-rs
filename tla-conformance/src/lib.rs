@@ -1,3 +1,4 @@
+pub mod snapshots;
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::{self, Read};

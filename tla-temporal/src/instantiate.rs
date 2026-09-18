@@ -1,8 +1,8 @@
-use crate::{Template, Temporal};
+use crate::{Error, behavior::Atom};
 use std::collections::HashMap;
-use tla_behavior::Atom;
 use tla_ir::{Expr, ExprId, Level};
 use tla_model::{BoundModel, Value};
+use tla_modules::temporal::{Template, Temporal};
 use tla_props::Formula;
 
 /// Temporal formulas over atoms that are IR predicates of the configured model.
@@ -14,7 +14,7 @@ pub struct Instantiated {
 
 /// Expands quantifiers over their (constant) domains and applies each predicate
 /// definition to the values bound around it.
-pub fn instantiate(model: &mut BoundModel, temporal: &Temporal) -> Result<Instantiated, String> {
+pub fn instantiate(model: &mut BoundModel, temporal: &Temporal) -> Result<Instantiated, Error> {
     let mut builder = Builder {
         model,
         atoms: Vec::new(),
@@ -29,7 +29,7 @@ pub fn instantiate(model: &mut BoundModel, temporal: &Temporal) -> Result<Instan
         .properties
         .iter()
         .map(|(name, t)| Ok((name.clone(), builder.formula(t, &mut Vec::new())?)))
-        .collect::<Result<_, String>>()?;
+        .collect::<Result<_, Error>>()?;
     Ok(Instantiated {
         assumptions,
         properties,
@@ -44,7 +44,7 @@ struct Builder<'a> {
 }
 
 impl Builder<'_> {
-    fn formula(&mut self, template: &Template, values: &mut Vec<Value>) -> Result<Formula, String> {
+    fn formula(&mut self, template: &Template, values: &mut Vec<Value>) -> Result<Formula, Error> {
         Ok(match template {
             Template::Atom(name) => Formula::atom(self.atom(name, false, values)?),
             Template::Not(t) => self.formula(t, values)?.negate(),
@@ -74,13 +74,13 @@ impl Builder<'_> {
                 let domain = self
                     .model
                     .evaluate(domain, &[], &[])
-                    .map_err(|e| format!("temporal quantifier domain: {e}"))?;
+                    .map_err(|e| tla_model::Error(format!("temporal quantifier domain: {e}")))?;
                 let mut result = if *universal {
                     Formula::True
                 } else {
                     Formula::False
                 };
-                for value in domain.elements().map_err(|e| e.to_string())? {
+                for value in domain.elements().map_err(tla_model::Error::from)? {
                     values.push(value.clone());
                     let formula = self.formula(body, values);
                     values.pop();
@@ -95,7 +95,7 @@ impl Builder<'_> {
         })
     }
 
-    fn atom(&mut self, name: &str, enabled: bool, values: &[Value]) -> Result<usize, String> {
+    fn atom(&mut self, name: &str, enabled: bool, values: &[Value]) -> Result<usize, Error> {
         let key = (name.to_owned(), enabled, values.to_vec());
         if let Some(&id) = self.index.get(&key) {
             return Ok(id);
@@ -107,13 +107,13 @@ impl Builder<'_> {
     }
 
     /// A call of the named definition on literal arguments.
-    fn apply(&mut self, name: &str, values: &[Value]) -> Result<ExprId, String> {
+    fn apply(&mut self, name: &str, values: &[Value]) -> Result<ExprId, Error> {
         let program = &mut self.model.program;
         let operator = program
             .operators
             .iter()
             .position(|op| op.name == name)
-            .ok_or_else(|| format!("missing temporal predicate {name}"))?;
+            .ok_or_else(|| Error::MissingPredicate(name.to_owned()))?;
         let level = program.nodes[program.operators[operator].body].level;
         let args = values
             .iter()

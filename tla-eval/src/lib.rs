@@ -505,3 +505,25 @@ impl<'a> Evaluator<'a> {
         }
     }
 }
+
+/// Interns `text` in the program's string table, assigning the next ordinal
+/// when `allow_new` permits it.
+pub fn intern_string(
+    strings: &Mutex<BTreeMap<String, u32>>,
+    text: String,
+    allow_new: bool,
+) -> Result<Value, String> {
+    let mut strings = strings.lock().map_err(|_| "string intern table poisoned")?;
+    if !allow_new && !strings.contains_key(&text) {
+        return Err("parallel evaluation cannot assign a new string ordinal".into());
+    }
+    let next = strings
+        .values()
+        .copied()
+        .max()
+        .unwrap_or(0)
+        .checked_add(1)
+        .ok_or("string ordinal overflow")?;
+    let ordinal = *strings.entry(text.clone()).or_insert(next);
+    Ok(Value::string(text, ordinal))
+}

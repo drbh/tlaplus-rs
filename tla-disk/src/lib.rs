@@ -1,10 +1,12 @@
+pub mod store;
+pub use store::Store;
 mod codec;
 pub use codec::{StateCodec, ValueCodec};
 use std::{fmt, time::Instant};
+use store::Node;
 use tla_engine::{
     Completion, Options, Statistics, Trace, TransitionSystem, Violation, ViolationKind,
 };
-use tla_store::{Node, Store};
 
 pub trait Codec<S, K> {
     fn state(&self, state: &S) -> Result<Vec<u8>, String>;
@@ -15,7 +17,7 @@ pub trait Codec<S, K> {
 #[derive(Debug)]
 pub enum Error<E> {
     Evaluation(E),
-    Storage(tla_store::Error),
+    Storage(store::Error),
     Codec(String),
     Configuration(String),
 }
@@ -29,8 +31,8 @@ impl<E: fmt::Display> fmt::Display for Error<E> {
     }
 }
 impl<E: fmt::Debug + fmt::Display> std::error::Error for Error<E> {}
-impl<E> From<tla_store::Error> for Error<E> {
-    fn from(e: tla_store::Error) -> Self {
+impl<E> From<store::Error> for Error<E> {
+    fn from(e: store::Error) -> Self {
         Self::Storage(e)
     }
 }

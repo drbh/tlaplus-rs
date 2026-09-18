@@ -9,8 +9,3 @@ tla-values = { path = "../tla-values" }
 tla-value-expr = { path = "../tla-value-expr" }
 tla-library = { path = "../tla-library" }
 
-[dev-dependencies]
-tla-bridge = { path = "../tla-bridge" }
-tla-model = { path = "../tla-model" }
-tla-engine = { path = "../tla-engine" }
-

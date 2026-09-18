@@ -1,0 +1,18 @@
+[package]
+name = "tla-checker"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+description = "The model checker as a library: load, bind, explore and check a specification."
+
+[dependencies]
+tla-modules = { path = "../tla-modules" }
+tla-parser = { path = "../tla-parser" }
+tla-lower = { path = "../tla-lower" }
+tla-ir = { path = "../tla-ir" }
+tla-model = { path = "../tla-model" }
+tla-engine = { path = "../tla-engine" }
+tla-temporal = { path = "../tla-temporal" }
+tla-props = { path = "../tla-props" }
+tla-disk = { path = "../tla-disk" }
+tla-observe = { path = "../tla-observe" }

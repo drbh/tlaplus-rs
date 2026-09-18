@@ -1,13 +1,11 @@
 use std::{cell::Cell, marker::PhantomData};
 use tla_engine::TransitionSystem;
-use tla_ir::{Builtin, ExprId, Program};
-pub use tla_oracle::ValueKey;
-use tla_sany_semantic::{NodeId, nodes::NodeData};
+use tla_sany_semantic::NodeId;
 use tla_tlc_eval::{NamedAction, TlcState, context::Context};
 use tla_tlc_value::{TlcError, Value};
 
 use crate::model::{Model, ModelError, Stage, State};
-pub(crate) use crate::value_key;
+use crate::values::{ValueKey, value_key};
 
 pub struct System<'model> {
     model: &'model Model,
@@ -36,7 +34,7 @@ impl Model {
         }
         let record_key = |state: &State<'_>| {
             value_key(&self.tool.state_record(&state.raw))
-                .map_err(|e| crate::evaluation_error(Stage::Canonicalization, e))
+                .map_err(|e| crate::model::evaluation_error(Stage::Canonicalization, e))
         };
         let system = self.safety_adapter();
         let mut current = None;
@@ -144,7 +142,7 @@ impl Model {
             .iter()
             .map(|value| value_key(value.as_ref().expect("complete state")))
             .collect::<Result<_, _>>()
-            .map_err(|e| crate::evaluation_error(Stage::Canonicalization, e))
+            .map_err(|e| crate::model::evaluation_error(Stage::Canonicalization, e))
     }
 
     pub fn canonical_key(&self, state: &State<'_>) -> Result<Vec<ValueKey>, ModelError> {
@@ -196,7 +194,7 @@ impl Model {
                 minimum.iter().map(value_key).collect()
             }
         };
-        calculate().map_err(|e| crate::evaluation_error(Stage::Canonicalization, e))
+        calculate().map_err(|e| crate::model::evaluation_error(Stage::Canonicalization, e))
     }
 
     fn property_failure(
@@ -209,7 +207,7 @@ impl Model {
             if !self
                 .tool
                 .is_valid_action(property, from, to)
-                .map_err(|e| crate::evaluation_error(Stage::Properties, e))?
+                .map_err(|e| crate::model::evaluation_error(Stage::Properties, e))?
             {
                 return Ok(Some(name.clone()));
             }
@@ -243,28 +241,25 @@ impl<'model> TransitionSystem for System<'model> {
             })
             .collect()
     }
-    fn visit_initial(
-        &self,
-        out: &mut impl FnMut(Self::State) -> crate::VisitResult,
-    ) -> crate::VisitResult {
+    fn visit_initial(&self, out: &mut impl FnMut(Self::State) -> VisitResult) -> VisitResult {
         self.model.begin_initial();
         let mut visit =
-            crate::Visit::new(|raw| out(self.model.complete_state(raw, Stage::InitialStates)?));
+            Visit::new(|raw| out(self.model.complete_state(raw, Stage::InitialStates)?));
         let result = self.model.tool.get_init_states(&mut visit);
         visit.finish(result, Stage::InitialStates)
     }
     fn visit_successors(
         &self,
         state: &Self::State,
-        out: &mut impl FnMut(tla_engine::Transition<Self::State>) -> crate::VisitResult,
-    ) -> crate::VisitResult {
+        out: &mut impl FnMut(tla_engine::Transition<Self::State>) -> VisitResult,
+    ) -> VisitResult {
         self.model.owns(state)?;
         self.model.begin_successors(state)?;
         for action in &self.model.processed.actions {
             let id = usize::try_from(action.id).map_err(|_| {
                 ModelError::message(Stage::Successors, "negative action identifier")
             })?;
-            let mut visit = crate::Visit::new(|mut raw: TlcState| {
+            let mut visit = Visit::new(|mut raw: TlcState| {
                 raw.set_predecessor(&state.raw);
                 raw.set_action(Some(action.id));
                 out(tla_engine::Transition {
@@ -322,188 +317,48 @@ impl<'model> TransitionSystem for System<'model> {
     }
 }
 
-pub fn from_faithful(value: &Value) -> Result<tla_values::Value, TlcError> {
-    use tla_values::Value as New;
-    let map_error = |e: tla_values::Error| TlcError::runtime(e.to_string());
-    value.deep_normalize()?;
-    Ok(match value {
-        Value::Bool(v) => New::Bool(*v),
-        Value::Int(v) => New::Int(*v),
-        Value::Str(v) => New::string(v.val.as_str(), v.val.tok() as u32),
-        Value::Model(v) => New::model(v.val.as_str(), v.val.tok() as u32),
-        _ => {
-            if let Some(f) = value.to_fcn_rcd()? {
-                New::function(
-                    f.domain_as_values()?
-                        .iter()
-                        .zip(f.values().iter())
-                        .map(|(k, v)| Ok((from_faithful(k)?, from_faithful(v)?)))
-                        .collect::<Result<_, TlcError>>()?,
-                )
-                .map_err(map_error)?
-            } else if let Some(s) = value.to_set_enum()? {
-                New::set(
-                    s.elems()
-                        .iter()
-                        .map(from_faithful)
-                        .collect::<Result<_, _>>()?,
-                )
-                .map_err(map_error)?
-            } else {
-                return Err(TlcError::runtime("value is not finite"));
+type VisitResult = Result<std::ops::ControlFlow<()>, ModelError>;
+struct Visit<F> {
+    out: F,
+    stopped: Option<VisitResult>,
+}
+impl<F: FnMut(tla_tlc_eval::TlcState) -> VisitResult> Visit<F> {
+    fn new(out: F) -> Self {
+        Self { out, stopped: None }
+    }
+    fn emit(&mut self, state: tla_tlc_eval::TlcState) -> Result<(), TlcError> {
+        if self.stopped.is_none() {
+            match (self.out)(state) {
+                Ok(std::ops::ControlFlow::Continue(())) => return Ok(()),
+                stopped => self.stopped = Some(stopped),
             }
         }
-    })
-}
-
-pub fn to_faithful(value: &tla_values::Value) -> Result<Value, TlcError> {
-    use tla_values::Value as New;
-    Ok(match value {
-        New::Bool(v) => Value::Bool(*v),
-        New::Int(v) => Value::Int(*v),
-        New::String(a) | New::Model(a) => {
-            let token = tla_tlc_value::UniqueString::of(&a.text);
-            if token.tok() as u32 != a.ordinal {
-                return Err(TlcError::runtime(
-                    "atom ordinal belongs to another intern session",
-                ));
-            }
-            if matches!(value, New::String(_)) {
-                Value::string(&a.text)
-            } else {
-                tla_tlc_value::value::mv_make(&a.text)
-            }
-        }
-        New::Set(v) => Value::set_enum(v.iter().map(to_faithful).collect::<Result<_, _>>()?, true),
-        New::Function(v) => Value::fcn_rcd(
-            v.iter()
-                .map(|(k, _)| to_faithful(k))
-                .collect::<Result<_, _>>()?,
-            v.iter()
-                .map(|(_, v)| to_faithful(v))
-                .collect::<Result<_, _>>()?,
-            true,
-        ),
-    })
-}
-
-pub fn intern_value(text: &str, model: bool) -> Result<tla_values::Value, TlcError> {
-    from_faithful(&if model {
-        tla_tlc_value::value::mv_make(text)
-    } else {
-        Value::string(text)
-    })
-}
-
-pub fn with_value_session<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> T {
-    tla_tlc_eval::in_fresh_jvm(move || {
-        tla_tlc_value::value::mv_init();
-        f()
-    })
-}
-
-impl Model {
-    pub fn constant_expression(
-        &self,
-        name: &str,
-    ) -> Result<(Program, ExprId, Result<tla_values::Value, String>), ModelError> {
-        let graph = self.tool.graph();
-        let id = graph
-            .node_ids()
-            .find(|id| {
-                matches!(graph.node(*id).data, NodeData::OpDef(_))
-                    && graph.name(*id).is_some_and(|value| *value == name)
-            })
-            .ok_or_else(|| ModelError::message(Stage::Load, "unknown expression definition"))?;
-        let NodeData::OpDef(definition) = &self.tool.graph().node(id).data else {
-            return Err(ModelError::message(
-                Stage::Load,
-                "expected expression definition",
-            ));
-        };
-        let body = definition
-            .body
-            .ok_or_else(|| ModelError::message(Stage::Load, "missing expression body"))?;
-        let mut lower = crate::lower::Lower::new(self);
-        let expression = lower.node(
-            body,
-            &Context::empty(),
-            &std::collections::HashMap::new(),
-            0,
-        )?;
-        let program = lower.finish()?;
-        let value = self
-            .tool
-            .eval(
-                body,
-                &Context::empty(),
-                &TlcState::Empty,
-                &TlcState::Empty,
-                0,
-            )
-            .and_then(|value| crate::checker::from_faithful(&value))
-            .map_err(|e| e.to_string());
-        Ok((program, expression, value))
+        Err(TlcError::runtime("bridge visitor stopped"))
+    }
+    fn finish(self, result: Result<(), TlcError>, stage: Stage) -> VisitResult {
+        self.stopped.unwrap_or_else(|| {
+            result
+                .map(|()| std::ops::ControlFlow::Continue(()))
+                .map_err(|error| crate::model::evaluation_error(stage, error))
+        })
     }
 }
-
-impl Model {
-    pub(crate) fn lower_symmetry(
-        &self,
-    ) -> Result<Vec<Vec<(tla_values::Value, tla_values::Value)>>, ModelError> {
-        let mut result = Vec::new();
-        for permutation in self.processed.symmetry_perms.iter().flatten() {
-            let mut entries = Vec::new();
-            for source in tla_tlc_value::value::mvs().unwrap_or_default() {
-                if let Some(target) = permutation.get(&source) {
-                    let source = from_faithful(&Value::Model(source))
-                        .map_err(|e| ModelError::message(Stage::Canonicalization, e))?;
-                    let target = from_faithful(&Value::Model(target))
-                        .map_err(|e| ModelError::message(Stage::Canonicalization, e))?;
-                    entries.push((source, target));
-                }
-            }
-            result.push(entries);
-        }
-        Ok(result)
+impl<F: FnMut(tla_tlc_eval::TlcState) -> VisitResult> tla_tlc_eval::nextstate::InitFunctor
+    for Visit<F>
+{
+    fn add_element(&mut self, state: tla_tlc_eval::TlcState) -> Result<(), TlcError> {
+        self.emit(state)
     }
 }
-
-pub(crate) use tla_model::literal;
-
-impl crate::lower::Lower<'_> {
-    pub(super) fn standard_builtin(&self, operator: NodeId, context: &Context) -> Option<Builtin> {
-        let graph = self.model.tool.graph();
-        let name = graph.name(operator)?;
-        let mut op = Builtin::from_name(name.as_str())?;
-        if let NodeData::OpDef(definition) = &graph.node(operator).data {
-            let module = definition
-                .originally_defined_in
-                .and_then(|id| graph.name(id));
-            op = op.in_module(module.as_ref().map(|name| name.as_str()))?;
-        }
-        let standard = match self.model.tool.lookup(operator, context, false) {
-            tla_tlc_eval::context::Obj::Value(Value::Method(method)) => {
-                let descriptor = method.op.description();
-                if op == Builtin::Ge && descriptor.contains("tlc2.module.Naturals.GEQ(") {
-                    op = Builtin::NaturalsGe;
-                }
-                true
-            }
-            tla_tlc_eval::context::Obj::Node(found) if found == operator => {
-                graph.node(operator).kind == tla_sany_semantic::nodes::kinds::BUILT_IN_KIND
-            }
-            tla_tlc_eval::context::Obj::Value(value) => from_faithful(&value).is_err(),
-            _ => false,
-        };
-        standard.then_some(op)
-    }
-    pub(super) fn method_origin(&mut self, id: ExprId, op: NodeId, context: &Context) -> ExprId {
-        if let tla_tlc_eval::context::Obj::Value(Value::Method(method)) =
-            self.model.tool.lookup(op, context, false)
-        {
-            self.program.methods.insert(id, method.op.description());
-        }
-        id
+impl<F: FnMut(tla_tlc_eval::TlcState) -> VisitResult> tla_tlc_eval::nextstate::NextFunctor
+    for Visit<F>
+{
+    fn add_element(
+        &mut self,
+        _: &tla_tlc_eval::TlcState,
+        _: &tla_tlc_eval::spec::Action,
+        state: &tla_tlc_eval::TlcState,
+    ) -> Result<(), TlcError> {
+        self.emit(state.clone())
     }
 }

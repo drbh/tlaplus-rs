@@ -162,7 +162,7 @@ fn with_session<T: Send + 'static>(
         let model = match Model::load(request) {
             Ok(model) => model,
             Err(mut error) => {
-                crate::append_setup_diagnostics(&mut error, &guard.0.take());
+                append_setup_diagnostics(&mut error, &guard.0.take());
                 return Err(error);
             }
         };
@@ -262,7 +262,7 @@ impl Model {
         let mut states = InitVec::default();
         self.tool
             .get_init_states(&mut states)
-            .map_err(|e| crate::evaluation_error(Stage::InitialStates, e))?;
+            .map_err(|e| evaluation_error(Stage::InitialStates, e))?;
         states
             .0
             .into_iter()
@@ -283,7 +283,7 @@ impl Model {
             let mut states = NextVec::default();
             self.tool
                 .get_next_states(action, &state.raw, &mut states)
-                .map_err(|e| crate::evaluation_error(Stage::Successors, e))?;
+                .map_err(|e| evaluation_error(Stage::Successors, e))?;
             for mut raw in states.0 {
                 raw.set_predecessor(&state.raw);
                 raw.set_action(Some(action.id));
@@ -303,7 +303,7 @@ impl Model {
         let fp = self
             .tool
             .state_fingerprint(&state.raw)
-            .map_err(|e| crate::evaluation_error(Stage::Canonicalization, e))?;
+            .map_err(|e| evaluation_error(Stage::Canonicalization, e))?;
         tla_tlc_value::random::with_random(|r| r.set_seed(fp ^ tla_tlc_value::random::get_seed()));
         Ok(())
     }
@@ -313,7 +313,7 @@ impl Model {
         self.owns(state)?;
         self.tool
             .is_in_model(&state.raw)
-            .map_err(|e| crate::evaluation_error(Stage::Constraints, e))
+            .map_err(|e| evaluation_error(Stage::Constraints, e))
     }
 
     /// Action-constraint filtering; does not also apply state constraints.
@@ -322,7 +322,7 @@ impl Model {
         self.owns(to)?;
         self.tool
             .is_in_actions(&from.raw, &to.raw)
-            .map_err(|e| crate::evaluation_error(Stage::Constraints, e))
+            .map_err(|e| evaluation_error(Stage::Constraints, e))
     }
 
     pub fn take_output(&self) -> Vec<String> {
@@ -369,9 +369,9 @@ impl State<'_> {
         self.raw
             .values()
             .iter()
-            .map(|value| crate::checker::from_faithful(value.as_ref().expect("complete state")))
+            .map(|value| crate::values::from_faithful(value.as_ref().expect("complete state")))
             .collect::<std::result::Result<_, _>>()
-            .map_err(|e| crate::evaluation_error(Stage::InspectState, e))
+            .map_err(|e| evaluation_error(Stage::InspectState, e))
     }
 
     /// TLC's state level, starting at 1; bookkeeping is excluded from equality.
@@ -383,7 +383,7 @@ impl State<'_> {
         self.model.owns(other)?;
         self.raw
             .state_equals(&other.raw)
-            .map_err(|e| crate::evaluation_error(Stage::InspectState, e))
+            .map_err(|e| evaluation_error(Stage::InspectState, e))
     }
 
     pub fn snapshot(&self) -> Result<StateSnapshot> {
@@ -392,10 +392,10 @@ impl State<'_> {
             let value = value.as_ref().expect("complete state");
             value
                 .deep_normalize()
-                .map_err(|e| crate::evaluation_error(Stage::InspectState, e))?;
+                .map_err(|e| evaluation_error(Stage::InspectState, e))?;
             let text = value
                 .to_string_checked()
-                .map_err(|e| crate::evaluation_error(Stage::InspectState, e))?;
+                .map_err(|e| evaluation_error(Stage::InspectState, e))?;
             values.insert(name.clone(), text);
         }
         Ok(StateSnapshot { values })
@@ -456,7 +456,7 @@ impl Model {
             }
         }
         fn atom(text: &str, ordinal: u32, model: bool) -> Result<()> {
-            let value = crate::checker::intern_value(text, model)
+            let value = crate::values::intern_value(text, model)
                 .map_err(|e| ModelError::message(Stage::Load, e))?;
             let expected = match &value {
                 tla_values::Value::String(atom) | tla_values::Value::Model(atom) => atom.ordinal,
@@ -493,17 +493,82 @@ impl Model {
                 .into_iter()
                 .map(|(key, value)| {
                     Ok((
-                        crate::checker::from_faithful(&key)?,
-                        crate::checker::from_faithful(&value)?,
+                        crate::values::from_faithful(&key)?,
+                        crate::values::from_faithful(&value)?,
                     ))
                 })
                 .collect::<std::result::Result<Vec<_>, TlcError>>()
-                .map_err(|e| crate::evaluation_error(Stage::Load, e))?;
+                .map_err(|e| evaluation_error(Stage::Load, e))?;
             model
+                .runtime
                 .registers
                 .seed(values)
                 .map_err(|e| ModelError::message(Stage::Load, e))?;
         }
         Ok(())
+    }
+}
+
+impl Model {
+    #[rustfmt::skip]    pub fn random_state(&self) -> u64 { tla_tlc_value::random::with_random(|random| random.seed_state()) }
+
+    pub(crate) fn capture_setup(&self) {
+        self.initial_context.replace(self.tool.runtime_snapshot());
+        self.initial_random
+            .replace(tla_tlc_value::random::with_random(|r| r.clone()));
+    }
+    pub(crate) fn begin_initial(&self) {
+        self.tool
+            .restore_runtime(self.initial_context.borrow().clone());
+        tla_tlc_value::random::set_current_state(None);
+        let saved = self.initial_random.borrow().clone();
+        tla_tlc_value::random::with_random(|r| *r = saved);
+    }
+}
+
+impl Model {
+    pub fn first_failed_assumption(&self) -> Option<(usize, Result<bool>)> {
+        self.processed
+            .assumptions
+            .iter()
+            .enumerate()
+            .find_map(|(index, (id, axiom))| {
+                if *axiom {
+                    return None;
+                }
+                match self.tool.is_valid_assumption(*id) {
+                    Ok(true) => None,
+                    result => Some((
+                        index,
+                        result.map_err(|error| evaluation_error(Stage::Assumptions, error)),
+                    )),
+                }
+            })
+    }
+}
+
+pub(crate) fn append_setup_diagnostics(
+    error: &mut ModelError,
+    records: &[tla_tlc_eval::mp::Record],
+) {
+    let details = records
+        .iter()
+        .rev()
+        .take(4)
+        .map(|r| tla_tlc_eval::mp::get_message(r.code, &r.params))
+        .collect::<Vec<_>>();
+    if !details.is_empty() {
+        error
+            .message
+            .push_str(&format!(" [{}]", details.join(" | ")));
+    }
+}
+
+pub(crate) fn evaluation_error(stage: Stage, error: TlcError) -> ModelError {
+    let (code, message) = tla_tlc_eval::error_code_and_message(&error);
+    ModelError {
+        stage,
+        code: Some(code),
+        message,
     }
 }

@@ -83,8 +83,9 @@ fn with_evaluator<R>(
     };
     let mut evaluator = model.evaluator(current, next, level);
     let random = model
+        .runtime
         .randomized
-        .then(|| model.random.current())
+        .then(|| model.runtime.random.current())
         .transpose()?;
     evaluator.random = random.as_deref();
     evaluator.enabled = Some(&enabled);

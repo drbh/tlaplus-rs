@@ -474,16 +474,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tla-behavior"
-version = "0.1.0"
-dependencies = [
- "tla-engine",
- "tla-ir",
- "tla-model",
- "tla-props",
-]
-
-[[package]]
 name = "tla-bridge"
 version = "0.1.0"
 dependencies = [
@@ -502,10 +492,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "tla-cli"
+name = "tla-checker"
 version = "0.1.0"
 dependencies = [
- "tla-behavior",
  "tla-disk",
  "tla-engine",
  "tla-ir",
@@ -515,8 +504,15 @@ dependencies = [
  "tla-observe",
  "tla-parser",
  "tla-props",
- "tla-store",
  "tla-temporal",
+]
+
+[[package]]
+name = "tla-cli"
+version = "0.1.0"
+dependencies = [
+ "tla-checker",
+ "tla-observe",
  "tla-value-expr",
 ]
 
@@ -529,41 +525,21 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tla-bridge",
- "tla-engine",
-]
-
-[[package]]
-name = "tla-conformance-runner"
-version = "0.1.0"
-dependencies = [
- "flate2",
- "serde",
- "serde_json",
- "tempfile",
- "tla-bridge",
- "tla-conformance",
  "tla-disk",
  "tla-engine",
- "tla-model",
- "tla-store",
- "tla-values",
-]
-
-[[package]]
-name = "tla-constants"
-version = "0.1.0"
-dependencies = [
  "tla-eval",
- "tla-ir",
+ "tla-model",
+ "tla-observe",
+ "tla-values",
 ]
 
 [[package]]
 name = "tla-disk"
 version = "0.1.0"
 dependencies = [
+ "redb",
  "tempfile",
  "tla-engine",
- "tla-store",
  "tla-values",
 ]
 
@@ -588,26 +564,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tla-eval-tests"
-version = "0.1.0"
-dependencies = [
- "tla-eval",
- "tla-ir",
- "tla-library",
-]
-
-[[package]]
-name = "tla-expression-conformance"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "tempfile",
- "tla-bridge",
- "tla-eval",
-]
-
-[[package]]
 name = "tla-ir"
 version = "0.1.0"
 
@@ -615,7 +571,6 @@ version = "0.1.0"
 name = "tla-library"
 version = "0.1.0"
 dependencies = [
- "tla-bridge",
  "tla-ir",
  "tla-value-expr",
  "tla-values",
@@ -639,8 +594,6 @@ dependencies = [
  "serde_json",
  "stacker",
  "tempfile",
- "tla-bridge",
- "tla-constants",
  "tla-engine",
  "tla-eval",
  "tla-ir",
@@ -654,17 +607,6 @@ dependencies = [
  "tla-ir",
  "tla-parser",
  "tla-syntax",
-]
-
-[[package]]
-name = "tla-native-conformance"
-version = "0.1.0"
-dependencies = [
- "flate2",
- "serde",
- "serde_json",
- "tla-bridge",
- "tla-conformance",
 ]
 
 [[package]]
@@ -704,23 +646,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tla-pipeline-conformance"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "tempfile",
- "tla-bridge",
- "tla-conformance",
- "tla-disk",
- "tla-engine",
- "tla-model",
- "tla-observe",
- "tla-snapshots",
- "tla-values",
-]
-
-[[package]]
 name = "tla-props"
 version = "0.1.0"
 dependencies = [
@@ -732,7 +657,6 @@ name = "tla-random"
 version = "0.1.0"
 dependencies = [
  "num-bigint",
- "tla-bridge",
  "tla-eval",
  "tla-value-expr",
  "tla-values",
@@ -742,10 +666,7 @@ dependencies = [
 name = "tla-runtime"
 version = "0.1.0"
 dependencies = [
- "tla-bridge",
- "tla-engine",
  "tla-library",
- "tla-model",
  "tla-value-expr",
  "tla-values",
 ]
@@ -770,19 +691,21 @@ name = "tla-sany-syntax"
 version = "0.1.0"
 
 [[package]]
-name = "tla-snapshots"
+name = "tla-stack-tests"
 version = "0.1.0"
 dependencies = [
- "serde",
+ "flate2",
  "serde_json",
-]
-
-[[package]]
-name = "tla-store"
-version = "0.1.0"
-dependencies = [
- "redb",
  "tempfile",
+ "tla-bridge",
+ "tla-engine",
+ "tla-eval",
+ "tla-ir",
+ "tla-library",
+ "tla-model",
+ "tla-random",
+ "tla-value-expr",
+ "tla-values",
 ]
 
 [[package]]
@@ -793,12 +716,12 @@ version = "0.1.0"
 name = "tla-temporal"
 version = "0.1.0"
 dependencies = [
- "tla-behavior",
+ "tla-engine",
  "tla-ir",
  "tla-model",
  "tla-modules",
  "tla-props",
- "tla-syntax",
+ "tla-values",
 ]
 
 [[package]]
@@ -874,9 +797,6 @@ dependencies = [
 [[package]]
 name = "tla-values"
 version = "0.1.0"
-dependencies = [
- "tla-bridge",
-]
 
 [[package]]
 name = "tree-sitter"

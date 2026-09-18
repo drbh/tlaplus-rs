@@ -9,10 +9,11 @@ publish = false
 
 [workspace.metadata.architecture]
 schema_version = 1
-documentation = "DIAGRAM.md"
+# Enforced by tla-stack-tests/tests/architecture.rs.
 
 [workspace.metadata.architecture.groups]
 "interfaces/cli" = "Command-line entry points and output"
+"application/checker" = "The checker as a library: loading, binding, exploration and checks"
 "frontend/native" = "Native parsing, syntax, module loading and lowering"
 "frontend/faithful" = "Scoped adapter to faithful SANY and TLC, including IR lowering"
 "semantics/ir" = "Shared expression representation, levels and transformations"
@@ -28,6 +29,7 @@ documentation = "DIAGRAM.md"
 [workspace.metadata.architecture.crates]
 tla-cli = "interfaces/cli"
 tla-oracle-cli = "interfaces/cli"
+tla-checker = "application/checker"
 tla-syntax = "frontend/native"
 tla-parser = "frontend/native"
 tla-modules = "frontend/native"
@@ -37,43 +39,33 @@ tla-ir = "semantics/ir"
 tla-values = "semantics/values"
 tla-value-expr = "semantics/values"
 tla-eval = "runtime/evaluation"
-tla-eval-tests = "runtime/evaluation"
 tla-library = "runtime/evaluation"
 tla-random = "runtime/evaluation"
 tla-runtime = "runtime/evaluation"
 tla-model = "runtime/model"
-tla-constants = "runtime/model"
 tla-engine = "runtime/exploration"
 tla-temporal = "verification/temporal"
-tla-behavior = "verification/temporal"
 tla-props = "verification/temporal"
 tla-disk = "infrastructure/storage"
-tla-store = "infrastructure/storage"
 tla-observe = "infrastructure/observability"
 tla-oracle = "validation/conformance"
 tla-conformance = "validation/conformance"
-tla-conformance-runner = "validation/conformance"
-tla-pipeline-conformance = "validation/conformance"
-tla-snapshots = "validation/conformance"
+tla-stack-tests = "validation/conformance"
 tla-value-conformance = "validation/conformance"
-tla-expression-conformance = "validation/conformance"
-tla-native-conformance = "validation/conformance"
 
 [workspace.metadata.architecture.allowed.normal]
-"interfaces/cli" = ["frontend/native", "infrastructure/observability", "infrastructure/storage", "runtime/exploration", "runtime/model", "semantics/ir", "semantics/values", "validation/conformance", "verification/temporal"]
+"interfaces/cli" = ["application/checker", "infrastructure/observability", "semantics/values", "validation/conformance"]
+"application/checker" = ["frontend/native", "infrastructure/observability", "infrastructure/storage", "runtime/exploration", "runtime/model", "semantics/ir", "semantics/values", "verification/temporal"]
 "frontend/native" = ["semantics/ir"]
 "frontend/faithful" = ["runtime/exploration", "runtime/model", "semantics/ir", "semantics/values", "validation/conformance"]
 "runtime/evaluation" = ["semantics/ir", "semantics/values"]
 "runtime/model" = ["runtime/evaluation", "runtime/exploration", "semantics/ir"]
-"verification/temporal" = ["frontend/native", "runtime/exploration", "runtime/model", "semantics/ir"]
+"verification/temporal" = ["frontend/native", "runtime/exploration", "runtime/model", "semantics/ir", "semantics/values"]
 "infrastructure/storage" = ["runtime/exploration", "semantics/values"]
 "infrastructure/observability" = ["runtime/exploration"]
 
 [workspace.metadata.architecture.allowed.dev]
 "frontend/faithful" = ["validation/conformance"]
-"runtime/evaluation" = ["frontend/faithful", "runtime/model", "runtime/exploration", "semantics/ir", "semantics/values"]
-"runtime/model" = ["frontend/faithful"]
-"semantics/values" = ["frontend/faithful"]
-"validation/conformance" = ["frontend/faithful", "infrastructure/observability", "infrastructure/storage", "runtime/evaluation", "runtime/exploration", "runtime/model", "semantics/values"]
+"validation/conformance" = ["frontend/faithful", "infrastructure/observability", "infrastructure/storage", "runtime/evaluation", "runtime/exploration", "runtime/model", "semantics/ir", "semantics/values"]
 
 [workspace.metadata.architecture.allowed.build]

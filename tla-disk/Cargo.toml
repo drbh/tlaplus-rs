@@ -6,7 +6,7 @@ publish.workspace = true
 
 [dependencies]
 tla-engine = { path = "../tla-engine" }
-tla-store = { path = "../tla-store" }
+redb = "4.3"
 tla-values = { path = "../tla-values" }
 
 [dev-dependencies]

@@ -1,4 +1,4 @@
-use tla_bridge::checker::intern_value;
+use tla_bridge::values::intern_value;
 use tla_values::{Error, SetExpr, Value};
 
 pub fn enumeration(text: &str) -> Result<std::collections::HashSet<Value>, String> {

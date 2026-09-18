@@ -5,6 +5,7 @@ use tla_ir::{Builtin, Expr, ExprId, Level, Program};
 use tla_model::BoundModel;
 use tla_sany_semantic::{NodeId, nodes::NodeData};
 use tla_tlc_eval::{TlcState, context::Context, context::Obj, spec::Action};
+use tla_tlc_value::Value;
 
 impl Model {
     pub fn lower(&self) -> Result<BoundModel, ModelError> {
@@ -46,20 +47,22 @@ impl Model {
             .validate()
             .map_err(|e| ModelError::message(Stage::Load, e))?;
         let mut model = BoundModel::new(program);
-        self.replay_random.set(model.randomized);
+        self.replay_random.set(model.runtime.randomized);
         self.seed_context(&mut model)?;
-        model.init = init;
-        model.actions = actions;
-        model.invariants = invariants;
-        model.initial_properties = initial_properties;
-        model.action_properties = action_properties;
-        (model.temporal_properties, model.temporal_assumptions) =
-            (temporal_properties, temporal_assumptions);
-        model.state_constraints = state_constraints;
-        model.action_constraints = action_constraints;
-        model.view = view;
-        model.symmetry = self.lower_symmetry()?;
-        model.check_deadlock = spec.config_check_deadlock;
+        model.checks.init = init;
+        model.checks.actions = actions;
+        model.checks.invariants = invariants;
+        model.checks.initial_properties = initial_properties;
+        model.checks.action_properties = action_properties;
+        (
+            model.checks.temporal_properties,
+            model.checks.temporal_assumptions,
+        ) = (temporal_properties, temporal_assumptions);
+        model.checks.state_constraints = state_constraints;
+        model.checks.action_constraints = action_constraints;
+        model.checks.view = view;
+        model.checks.symmetry = self.lower_symmetry()?;
+        model.checks.check_deadlock = spec.config_check_deadlock;
         Ok(model)
     }
 }
@@ -68,13 +71,20 @@ struct Resolved {
     definition: Option<(NodeId, tla_sany_semantic::nodes::OpDefData)>,
 }
 
+#[derive(Clone, Default)]
+pub(crate) struct LowerCache {
+    pub operators: HashMap<NodeId, usize>,
+    pub names: HashMap<String, usize>,
+    pub functions: HashMap<NodeId, ExprId>,
+}
+
 pub(crate) mod apply;
 
 pub(crate) struct Lower<'a> {
     pub(crate) model: &'a Model,
     pub(crate) program: Program,
     next_local: usize,
-    cache: crate::LowerCache,
+    cache: LowerCache,
     enabled_variables: HashMap<NodeId, ExprId>,
     expanding: Vec<NodeId>,
     enabled_scope: HashMap<NodeId, (ExprId, ExprId)>,
@@ -88,7 +98,7 @@ impl<'a> Lower<'a> {
             model,
             program: model.lowered_program(),
             next_local: 0,
-            cache: crate::LowerCache::default(),
+            cache: LowerCache::default(),
             enabled_variables: HashMap::new(),
             expanding: Vec::new(),
             enabled_scope: HashMap::new(),
@@ -372,11 +382,11 @@ impl<'a> Lower<'a> {
             self.next_local += arity;
             return Ok(self
                 .program
-                .table_operator(crate::operator_table(table)?, parameters));
+                .table_operator(crate::values::operator_table(table)?, parameters));
         }
-        let value = crate::checker::from_faithful(value).map_err(|e| self.error(e))?;
+        let value = crate::values::from_faithful(value).map_err(|e| self.error(e))?;
         Ok(self.program.push(
-            Expr::Literal(crate::checker::literal(&value)),
+            Expr::Literal(crate::values::literal(&value)),
             Level::Constant,
         ))
     }
@@ -502,5 +512,154 @@ impl<'a> Lower<'a> {
             _ => return Err(self.error(format!("unsupported semantic node {}", node.kind))),
         };
         Ok(self.program.push(expression, level))
+    }
+}
+
+impl Model {
+    pub fn lower_assumptions(&self) -> Result<(BoundModel, Vec<(usize, ExprId)>), ModelError> {
+        let mut lower = Lower::new(self);
+        let mut assumptions = Vec::new();
+        for (index, (id, axiom)) in self.processed.assumptions.iter().enumerate() {
+            if !axiom {
+                assumptions.push((
+                    index,
+                    lower.node(*id, &Context::empty(), &HashMap::new(), 0)?,
+                ));
+            }
+        }
+        let program = lower.finish()?;
+        program
+            .validate()
+            .map_err(|e| ModelError::message(Stage::Load, e))?;
+        let mut model = BoundModel::new(program);
+        self.seed_context(&mut model)?;
+        Ok((model, assumptions))
+    }
+}
+
+impl Model {
+    pub fn constant_expression(
+        &self,
+        name: &str,
+    ) -> Result<(Program, ExprId, Result<tla_values::Value, String>), ModelError> {
+        let graph = self.tool.graph();
+        let id = graph
+            .node_ids()
+            .find(|id| {
+                matches!(graph.node(*id).data, NodeData::OpDef(_))
+                    && graph.name(*id).is_some_and(|value| *value == name)
+            })
+            .ok_or_else(|| ModelError::message(Stage::Load, "unknown expression definition"))?;
+        let NodeData::OpDef(definition) = &self.tool.graph().node(id).data else {
+            return Err(ModelError::message(
+                Stage::Load,
+                "expected expression definition",
+            ));
+        };
+        let body = definition
+            .body
+            .ok_or_else(|| ModelError::message(Stage::Load, "missing expression body"))?;
+        let mut lower = Lower::new(self);
+        let expression = lower.node(
+            body,
+            &Context::empty(),
+            &std::collections::HashMap::new(),
+            0,
+        )?;
+        let program = lower.finish()?;
+        let value = self
+            .tool
+            .eval(
+                body,
+                &Context::empty(),
+                &TlcState::Empty,
+                &TlcState::Empty,
+                0,
+            )
+            .and_then(|value| crate::values::from_faithful(&value))
+            .map_err(|e| e.to_string());
+        Ok((program, expression, value))
+    }
+}
+
+impl Model {
+    pub(crate) fn lower_symmetry(
+        &self,
+    ) -> Result<Vec<Vec<(tla_values::Value, tla_values::Value)>>, ModelError> {
+        let mut result = Vec::new();
+        for permutation in self.processed.symmetry_perms.iter().flatten() {
+            let mut entries = Vec::new();
+            for source in tla_tlc_value::value::mvs().unwrap_or_default() {
+                if let Some(target) = permutation.get(&source) {
+                    let source = crate::values::from_faithful(&Value::Model(source))
+                        .map_err(|e| ModelError::message(Stage::Canonicalization, e))?;
+                    let target = crate::values::from_faithful(&Value::Model(target))
+                        .map_err(|e| ModelError::message(Stage::Canonicalization, e))?;
+                    entries.push((source, target));
+                }
+            }
+            result.push(entries);
+        }
+        Ok(result)
+    }
+}
+
+impl Lower<'_> {
+    pub(crate) fn builtin(
+        &mut self,
+        op: tla_ir::Builtin,
+        args: Vec<ExprId>,
+        literal_message: bool,
+        level: tla_ir::Level,
+    ) -> Result<ExprId, ModelError> {
+        self.program
+            .checked_apply(op, args, literal_message, level)
+            .map_err(|e| ModelError::message(Stage::Load, e))
+    }
+
+    pub(crate) fn finish(mut self) -> Result<tla_ir::Program, ModelError> {
+        self.program
+            .specialize_calls()
+            .map_err(|e| ModelError::message(Stage::Load, e))?;
+        Ok(self.program)
+    }
+}
+
+impl Lower<'_> {
+    pub(super) fn standard_builtin(&self, operator: NodeId, context: &Context) -> Option<Builtin> {
+        let graph = self.model.tool.graph();
+        let name = graph.name(operator)?;
+        let mut op = Builtin::from_name(name.as_str())?;
+        if let NodeData::OpDef(definition) = &graph.node(operator).data {
+            let module = definition
+                .originally_defined_in
+                .and_then(|id| graph.name(id));
+            op = op.in_module(module.as_ref().map(|name| name.as_str()))?;
+        }
+        let standard = match self.model.tool.lookup(operator, context, false) {
+            tla_tlc_eval::context::Obj::Value(Value::Method(method)) => {
+                let descriptor = method.op.description();
+                if op == Builtin::Ge && descriptor.contains("tlc2.module.Naturals.GEQ(") {
+                    op = Builtin::NaturalsGe;
+                }
+                true
+            }
+            tla_tlc_eval::context::Obj::Node(found) if found == operator => {
+                graph.node(operator).kind == tla_sany_semantic::nodes::kinds::BUILT_IN_KIND
+            }
+            tla_tlc_eval::context::Obj::Value(value) => {
+                crate::values::from_faithful(&value).is_err()
+            }
+            _ => false,
+        };
+        standard.then_some(op)
+    }
+    pub(super) fn method_origin(&mut self, id: ExprId, op: NodeId, context: &Context) -> ExprId {
+        if let tla_tlc_eval::context::Obj::Value(Value::Method(method)) =
+            self.model.tool.lookup(op, context, false)
+        {
+            self.program.methods.insert(id, method.op.description());
+        }
+        id
     }
 }

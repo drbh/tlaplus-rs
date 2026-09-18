@@ -36,7 +36,7 @@ fn compare_model(dir: &Path, module: &str) -> Answers {
                         .map(|s| model.state_values(s))
                         .collect::<Result<Vec<_>, _>>()?;
                     let encoded = serde_json::to_string(&values).unwrap();
-                    let decoded: Vec<Vec<tla_bridge::checker::ValueKey>> =
+                    let decoded: Vec<Vec<tla_bridge::values::ValueKey>> =
                         serde_json::from_str(&encoded).unwrap();
                     assert_eq!(values, decoded);
                     match &violation.kind {
@@ -188,7 +188,7 @@ fn safety_adapter_rejects_liveness_instead_of_reporting_success() {
 
 #[test]
 fn faithful_capture_preserves_original_states_under_alias_and_resets() {
-    use tla_bridge::{checker::ValueKey, observe_faithful};
+    use tla_bridge::{observe_faithful, values::ValueKey};
     for (property, expected) in [
         ("BadInit", vec![0]),
         ("BadNext", vec![0, 1]),
@@ -323,7 +323,7 @@ Safe == x = 0
                     .is_break()
             );
             assert_eq!(count, 1);
-            use tla_bridge::checker::ValueKey;
+            use tla_bridge::values::ValueKey;
             let record =
                 |x| ValueKey::Function(vec![(ValueKey::String("x".into()), ValueKey::Int(x))]);
             assert!(model.validate_safety_records(

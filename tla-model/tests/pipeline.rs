@@ -56,8 +56,8 @@ fn counter() -> BoundModel {
         Level::Action,
     );
     let mut model = BoundModel::new(p);
-    model.init.push(init);
-    model.actions.push(("Next".into(), action));
+    model.checks.init.push(init);
+    model.checks.actions.push(("Next".into(), action));
     model
 }
 
@@ -95,7 +95,7 @@ fn invariant_witness_and_constraint_pruning() {
         },
         Level::State,
     );
-    model.invariants.push(("Bound".into(), invariant));
+    model.checks.invariants.push(("Bound".into(), invariant));
     let result = explore(&model, &Options::default()).unwrap();
     let Completion::Violated(violation) = result.completion else {
         panic!("expected violation");
@@ -114,8 +114,8 @@ fn invariant_witness_and_constraint_pruning() {
         ]
     );
     assert!(validate_trace(&model, &violation).unwrap());
-    model.invariants.clear();
-    model.state_constraints.push(invariant);
+    model.checks.invariants.clear();
+    model.checks.state_constraints.push(invariant);
     let result = explore(&model, &Options::default()).unwrap();
     assert_eq!(result.nodes.len(), 2);
     assert_eq!(result.completion, Completion::Complete);
@@ -135,7 +135,7 @@ fn generating_membership_preserves_choices_and_requires_complete_states() {
         },
         Level::State,
     );
-    model.init = vec![initial];
+    model.checks.init = vec![initial];
     assert_eq!(
         model
             .initial_states()
@@ -145,7 +145,7 @@ fn generating_membership_preserves_choices_and_requires_complete_states() {
             .collect::<Vec<_>>(),
         vec![vec![Value::Int(2)], vec![Value::Int(4)]]
     );
-    model.init.clear();
+    model.checks.init.clear();
     assert!(model.initial_states().is_err());
 }
 
@@ -169,11 +169,11 @@ fn streaming_stops_before_later_branches_and_large_products() {
     let choice = model.program.push(
         Expr::Apply {
             op: B::Or,
-            args: vec![model.init[0], bad],
+            args: vec![model.checks.init[0], bad],
         },
         Level::State,
     );
-    model.init = vec![choice];
+    model.checks.init = vec![choice];
     assert!(model.initial_states().is_err());
     let mut seen = 0;
     assert!(
@@ -220,7 +220,7 @@ fn streaming_stops_before_later_branches_and_large_products() {
         Level::State,
     );
     let mut product = BoundModel::new(p);
-    product.init = vec![init];
+    product.checks.init = vec![init];
     let mut states = Vec::new();
     let _ = product
         .visit_initial(&mut |state| {
@@ -321,7 +321,7 @@ fn enabled_checks_partial_actions_without_applying_model_constraints() {
     let condition = model.program.push(
         Expr::Apply {
             op: B::Enabled,
-            args: vec![model.actions[0].1],
+            args: vec![model.checks.actions[0].1],
         },
         Level::State,
     );
@@ -332,7 +332,7 @@ fn enabled_checks_partial_actions_without_applying_model_constraints() {
     let false_id = model
         .program
         .push(Expr::Literal(Literal::Bool(false)), Level::Constant);
-    model.state_constraints.push(false_id);
+    model.checks.state_constraints.push(false_id);
     assert_eq!(
         model.evaluate(condition, &[Value::Int(0)], &[]).unwrap(),
         Value::Bool(true)
@@ -443,7 +443,7 @@ fn parallel_string_discovery_matches_serial_ordinals_from_fresh_tables() {
         },
         Level::State,
     );
-    model.init = vec![init_x, init_s];
+    model.checks.init = vec![init_x, init_s];
     let generated = p.push(
         Expr::Apply {
             op: B::ToString,
@@ -461,14 +461,15 @@ fn parallel_string_discovery_matches_serial_ordinals_from_fresh_tables() {
     let next = p.push(
         Expr::Apply {
             op: B::And,
-            args: vec![model.actions[0].1, assign],
+            args: vec![model.checks.actions[0].1, assign],
         },
         Level::Action,
     );
-    model.actions = vec![("Next".into(), next)];
+    model.checks.actions = vec![("Next".into(), next)];
     let fresh = || {
         let mut copy = model.clone();
-        copy.strings = std::sync::Arc::new(std::sync::Mutex::new(copy.program.strings.clone()));
+        copy.runtime.strings =
+            std::sync::Arc::new(std::sync::Mutex::new(copy.program.strings.clone()));
         copy
     };
     let serial = fresh();
@@ -495,8 +496,8 @@ fn parallel_string_discovery_matches_serial_ordinals_from_fresh_tables() {
                 .collect::<Vec<_>>()
         );
         assert_eq!(
-            *parallel.strings.lock().unwrap(),
-            *serial.strings.lock().unwrap()
+            *parallel.runtime.strings.lock().unwrap(),
+            *serial.runtime.strings.lock().unwrap()
         );
     }
 }

@@ -9,16 +9,6 @@ name = "tla"
 path = "src/main.rs"
 
 [dependencies]
-tla-modules = { path = "../tla-modules" }
-tla-lower = { path = "../tla-lower" }
-tla-ir = { path = "../tla-ir" }
-tla-model = { path = "../tla-model" }
-tla-engine = { path = "../tla-engine" }
-tla-temporal = { path = "../tla-temporal" }
-tla-props = { path = "../tla-props" }
-tla-disk = { path = "../tla-disk" }
-tla-store = { path = "../tla-store" }
-tla-parser = { path = "../tla-parser" }
-tla-behavior = { path = "../tla-behavior" }
+tla-checker = { path = "../tla-checker" }
 tla-observe = { path = "../tla-observe" }
 tla-value-expr = { path = "../tla-value-expr" }

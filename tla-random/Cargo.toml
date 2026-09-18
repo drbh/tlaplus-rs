@@ -10,5 +10,4 @@ tla-value-expr = { path = "../tla-value-expr" }
 tla-values = { path = "../tla-values" }
 
 [dev-dependencies]
-tla-bridge = { path = "../tla-bridge" }
 tla-eval = { path = "../tla-eval" }

@@ -41,19 +41,21 @@ tla examples/01-counter/Counter.tla
 
 ## layout
 
-each workspace crate is a top level directory, at most 5 files and under 510 lines per file. the limits are enforced by the tests
+|                                                        |                                                    |
+| ------------------------------------------------------ | -------------------------------------------------- |
+| `tla-cli`                                              | the `tla` binary: arguments and output             |
+| `tla-checker`                                          | the checker as a library: load, bind, run, outcome |
+| `tla-syntax`, `tla-parser`, `tla-modules`, `tla-lower` | front end: parsing, module loading, lowering to IR |
+| `tla-ir`, `tla-values`, `tla-value-expr`               | expression representation and values               |
+| `tla-eval`, `tla-library`, `tla-runtime`, `tla-random` | evaluation and the standard modules                |
+| `tla-model`, `tla-engine`                              | configured models, state generation, exploration   |
+| `tla-temporal`, `tla-props`                            | liveness                                           |
+| `tla-disk`, `tla-observe`                              | disk backed exploration and tracing                |
+| `tla-oracle`, `tla-bridge`, `tla-conformance`          | differential testing against TLC; the corpus runners are `tla-conformance`'s examples |
+| `tla-stack-tests`                                      | whole-stack tests and the crate layering check     |
 
-|                                                                   |                                                    |
-| ----------------------------------------------------------------- | -------------------------------------------------- |
-| `tla-cli`                                                         | the `tla` binary                                   |
-| `tla-syntax`, `tla-parser`, `tla-modules`, `tla-lower`            | front end: parsing, module loading, lowering to IR |
-| `tla-ir`, `tla-values`, `tla-value-expr`                          | expression representation and values               |
-| `tla-eval`, `tla-library`, `tla-runtime`, `tla-random`            | evaluation and the standard modules                |
-| `tla-model`, `tla-constants`, `tla-engine`                        | configured models, state generation, exploration   |
-| `tla-temporal`, `tla-behavior`, `tla-props`                       | liveness                                           |
-| `tla-disk`, `tla-store`, `tla-observe`                            | disk backed exploration and tracing                |
-| `tla-oracle`, `tla-bridge`, `tla-*-conformance*`, `tla-snapshots` | differential testing against TLC                   |
-
+the layering between these groups is declared under `[workspace.metadata.architecture]`
+in `Cargo.toml` and enforced by `tla-stack-tests/tests/architecture.rs`.
 
 ## develop
 

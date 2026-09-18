@@ -5,7 +5,6 @@ edition.workspace = true
 publish.workspace = true
 
 [dependencies]
-tla-constants = { path = "../tla-constants" }
 rayon = "1"
 stacker = "0.1"
 tla-ir = { path = "../tla-ir" }
@@ -14,7 +13,6 @@ tla-runtime = { path = "../tla-runtime" }
 tla-engine = { path = "../tla-engine" }
 
 [dev-dependencies]
-tla-bridge = { path = "../tla-bridge" }
 tempfile = "3"
 serde_json = "1"
 flate2 = "1"

@@ -1,4 +1,4 @@
-use tla_bridge::checker::intern_value;
+use tla_bridge::values::intern_value;
 use tla_value_expr::{Expr as Runtime, FunctionKind, InfiniteSet, SetOp};
 use tla_values::{Atom, Error, Value};
 #[derive(Debug)]

@@ -272,7 +272,7 @@ pub(crate) fn sample(
 
 impl Evaluator<'_> {
     pub(crate) fn string(&self, text: String) -> Result<Value, Error> {
-        tla_runtime::intern_string(&self.strings, text, self.intern_new_strings).map_err(Error)
+        crate::intern_string(&self.strings, text, self.intern_new_strings).map_err(Error)
     }
 }
 
