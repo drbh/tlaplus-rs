@@ -1,0 +1,18 @@
+[package]
+name = "tla-oracle-cli"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+description = "Extract and compare recorded TLC answers"
+
+[[bin]]
+name = "oracle"
+path = "src/main.rs"
+
+[dependencies]
+tla-oracle = { path = "../tla-oracle" }
+serde_json = "1"
+
+[dev-dependencies]
+flate2 = "1"
+tempfile = "3"

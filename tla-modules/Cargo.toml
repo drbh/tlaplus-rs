@@ -1,0 +1,10 @@
+[package]
+name = "tla-modules"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+tla-syntax = { path = "../tla-syntax" }
+tla-ir = { path = "../tla-ir" }
+tla-parser = { path = "../tla-parser" }

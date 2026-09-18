@@ -1,0 +1,9 @@
+[package]
+name = "tla-constants"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+tla-eval = { path = "../tla-eval" }
+tla-ir = { path = "../tla-ir" }

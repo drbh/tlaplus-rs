@@ -1,0 +1,10 @@
+[package]
+name = "tla-parser"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+tree-sitter = "0.25"
+tree-sitter-tlaplus = "1.5"
+tla-syntax = { path = "../tla-syntax" }

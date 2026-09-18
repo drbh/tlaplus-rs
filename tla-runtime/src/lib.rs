@@ -1,0 +1,385 @@
+use std::{
+    collections::BTreeMap,
+    num::NonZeroUsize,
+    sync::{
+        Mutex,
+        atomic::{AtomicUsize, Ordering},
+    },
+};
+use tla_value_expr::Expr;
+use tla_values::Value;
+
+pub fn intern_string(
+    strings: &Mutex<BTreeMap<String, u32>>,
+    text: String,
+    allow_new: bool,
+) -> Result<Value, String> {
+    let mut strings = strings.lock().map_err(|_| "string intern table poisoned")?;
+    if !allow_new && !strings.contains_key(&text) {
+        return Err("parallel evaluation cannot assign a new string ordinal".into());
+    }
+    let next = strings
+        .values()
+        .copied()
+        .max()
+        .unwrap_or(0)
+        .checked_add(1)
+        .ok_or("string ordinal overflow")?;
+    let ordinal = *strings.entry(text.clone()).or_insert(next);
+    Ok(Value::string(text, ordinal))
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum Key {
+    Index(i32),
+    Named(String),
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct SetupSnapshot(BTreeMap<Key, Entry>);
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct Entry {
+    key: Value,
+    value: Value,
+}
+
+#[derive(Debug, Default)]
+pub struct Registers {
+    initial: SetupSnapshot,
+    configured_workers: AtomicUsize,
+    workers: Mutex<Option<Vec<BTreeMap<Key, Entry>>>>,
+    statistics: Mutex<BTreeMap<String, Value>>,
+}
+
+impl Clone for Registers {
+    fn clone(&self) -> Self {
+        Self {
+            initial: self.initial.clone(),
+            ..Self::default()
+        }
+    }
+}
+
+fn rendered(value: &Value) -> Result<String, String> {
+    tla_library::stringify(&Expr::atom(value.clone())).map_err(|e| e.to_string())
+}
+
+fn key(value: &Value, operation: &str) -> Result<Key, String> {
+    match value {
+        Value::Int(index) if *index >= 0 => Ok(Key::Index(*index)),
+        Value::String(name) if name.text.starts_with("s:") => Ok(Key::Named(name.text.to_string())),
+        _ => Err(format!(
+            "The {}argument of {operation} should be a nonnegative integer, but instead it is:\n{}",
+            if operation == "TLCSet" { "first " } else { "" },
+            rendered(value)?
+        )),
+    }
+}
+
+impl Registers {
+    pub fn seed(&mut self, values: impl IntoIterator<Item = (Value, Value)>) -> Result<(), String> {
+        self.begin_setup(NonZeroUsize::MIN)?;
+        for (key, value) in values {
+            self.set(None, &key, value)?;
+        }
+        self.capture_setup()
+    }
+    pub fn begin_setup(&mut self, workers: NonZeroUsize) -> Result<(), String> {
+        self.initial = SetupSnapshot::default();
+        self.start(workers)
+    }
+    pub fn capture_setup(&mut self) -> Result<(), String> {
+        let workers = self.workers.lock().map_err(|_| "registers poisoned")?;
+        let workers = workers.as_ref().ok_or("register setup has not started")?;
+        let first = workers.first().ok_or("register setup has no workers")?;
+        if workers.iter().any(|worker| worker != first) {
+            return Err("setup registers differ between workers".into());
+        }
+        self.initial = SetupSnapshot(first.clone());
+        Ok(())
+    }
+    pub fn setup_snapshot(&self) -> SetupSnapshot {
+        self.initial.clone()
+    }
+    pub fn restore_setup(&mut self, snapshot: SetupSnapshot) {
+        self.initial = snapshot;
+    }
+    pub fn configure(&self, workers: NonZeroUsize) {
+        self.configured_workers
+            .store(workers.get(), Ordering::Relaxed);
+    }
+    pub fn reset(&self) -> Result<(), String> {
+        let workers = self.configured_workers.load(Ordering::Relaxed).max(1);
+        *self.workers.lock().map_err(|_| "registers poisoned")? =
+            Some(vec![self.initial.0.clone(); workers]);
+        Ok(())
+    }
+    pub fn get_or_default(
+        &self,
+        worker: Option<usize>,
+        argument: &Value,
+        default: Value,
+    ) -> Result<Value, String> {
+        let key = match argument {
+            Value::Int(index) => Key::Index(*index),
+            Value::String(name) if name.text.starts_with("s:") => Key::Named(name.text.to_string()),
+            _ => return Ok(default),
+        };
+        let workers = self.workers.lock().map_err(|_| "registers poisoned")?;
+        let Some(workers) = workers.as_ref() else {
+            return Ok(default);
+        };
+        let registers = workers
+            .get(worker.unwrap_or(0))
+            .ok_or("invalid register worker")?;
+        if let Key::Index(index) = key
+            && index < 0
+        {
+            let length = registers
+                .keys()
+                .filter_map(|key| match key {
+                    Key::Index(index) => Some(*index as usize + 1),
+                    _ => None,
+                })
+                .max()
+                .unwrap_or(4)
+                .max(4);
+            return Err(format!(
+                "java.lang.ArrayIndexOutOfBoundsException: Index {index} out of bounds for length {length}"
+            ));
+        }
+        Ok(registers
+            .get(&key)
+            .map(|entry| entry.value.clone())
+            .unwrap_or(default))
+    }
+    pub fn start(&self, workers: NonZeroUsize) -> Result<(), String> {
+        self.configure(workers);
+        *self.workers.lock().map_err(|_| "registers poisoned")? =
+            Some(vec![BTreeMap::new(); workers.get()]);
+        Ok(())
+    }
+
+    /// Publishes checker statistics (`"distinct"`, `"stats"`, ...) for `TLCGet`.
+    pub fn publish(&self, statistics: BTreeMap<String, Value>) -> Result<(), String> {
+        self.statistics
+            .lock()
+            .map_err(|_| "registers poisoned")?
+            .extend(statistics);
+        Ok(())
+    }
+
+    pub fn get(&self, worker: Option<usize>, argument: &Value) -> Result<Value, String> {
+        if let Value::String(name) = argument
+            && let Some(value) = self
+                .statistics
+                .lock()
+                .map_err(|_| "registers poisoned")?
+                .get(name.text.as_ref())
+        {
+            return Ok(value.clone());
+        }
+        if let Value::String(name) = argument
+            && !name.text.starts_with("s:")
+        {
+            if matches!(name.text.as_ref(), "all" | "all:named") {
+                return self.all(name.text.as_ref() == "all:named");
+            }
+            if name.text.starts_with("-D") {
+                return Ok(argument.clone());
+            }
+            return Err(
+                if matches!(
+                    name.text.as_ref(),
+                    "config"
+                        | "spec"
+                        | "revision"
+                        | "action"
+                        | "behavior"
+                        | "diameter"
+                        | "generated"
+                        | "distinct"
+                        | "queue"
+                        | "stats"
+                ) || name.text.starts_with("-D")
+                {
+                    format!("unsupported TLCGet runtime key: {}", name.text)
+                } else {
+                    format!("TLCGet({}) was undefined.", name.text)
+                },
+            );
+        }
+        let key = key(argument, "TLCGet")?;
+        let workers = self.workers.lock().map_err(|_| "registers poisoned")?;
+        if let Some(workers) = workers.as_ref() {
+            let registers = workers
+                .get(worker.unwrap_or(0))
+                .ok_or("invalid register worker")?;
+            if let Some(value) = registers.get(&key) {
+                return Ok(value.value.clone());
+            }
+        }
+        let name = match key {
+            Key::Index(index) => index.to_string(),
+            Key::Named(name) => name,
+        };
+        Err(format!("TLCGet({name}) was undefined."))
+    }
+
+    fn all(&self, named: bool) -> Result<Value, String> {
+        let workers = self.workers.lock().map_err(|_| "registers poisoned")?;
+        let workers = workers.as_ref().ok_or_else(|| {
+            format!(
+                "TLCGet({}) was undefined.",
+                if named { "all:named" } else { "all" }
+            )
+        })?;
+        let mut entries = Vec::new();
+        if let Some(first) = workers.first() {
+            for (key, entry) in first {
+                if matches!(key, Key::Named(_)) != named {
+                    continue;
+                }
+                let values = workers
+                    .iter()
+                    .map(|worker| {
+                        worker
+                            .get(key)
+                            .map(|entry| entry.value.clone())
+                            .ok_or_else(|| "java.lang.NullPointerException".to_owned())
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                entries.push((entry.key.clone(), Value::tuple(values)));
+            }
+        }
+        Value::function(entries).map_err(|e| e.to_string())
+    }
+
+    pub fn set(
+        &self,
+        worker: Option<usize>,
+        argument: &Value,
+        value: Value,
+    ) -> Result<Value, String> {
+        if let Value::String(name) = argument
+            && (matches!(name.text.as_ref(), "exit" | "pause") || name.text.starts_with("-D"))
+        {
+            return Ok(Value::Bool(true));
+        }
+        let key = key(argument, "TLCSet")?;
+        let mut workers = self.workers.lock().map_err(|_| "registers poisoned")?;
+        let Some(workers) = workers.as_mut() else {
+            return if matches!(key, Key::Named(_)) {
+                Ok(Value::Bool(true))
+            } else {
+                Err("TLCSet requires an active checker".into())
+            };
+        };
+        if let Some(worker) = worker {
+            workers
+                .get_mut(worker)
+                .ok_or("invalid register worker")?
+                .insert(
+                    key,
+                    Entry {
+                        key: argument.clone(),
+                        value,
+                    },
+                );
+        } else {
+            for registers in workers {
+                registers.insert(
+                    key.clone(),
+                    Entry {
+                        key: argument.clone(),
+                        value: value.clone(),
+                    },
+                );
+            }
+        }
+        Ok(Value::Bool(true))
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct Cache(Mutex<BTreeMap<i32, Vec<(Value, Value)>>>);
+
+impl Cache {
+    pub fn evaluate(
+        &self,
+        metadata: &Value,
+        key: Value,
+        polynomial: u64,
+        evaluate: impl FnOnce() -> Result<Value, String>,
+    ) -> Result<Value, String> {
+        let metadata = metadata.sequence().map_err(|e| e.to_string())?;
+        let [Value::Int(site), seed] = metadata.as_slice() else {
+            return Err("invalid cache metadata".into());
+        };
+        let site = *site;
+        let seed = seed.entries().map_err(|e| e.to_string())?;
+        let hash = |value: &Value| {
+            let fp = value.extend_fingerprint(polynomial, polynomial);
+            (fp >> 32) as u32 ^ fp as u32
+        };
+        {
+            let mut entries = self.0.lock().map_err(|_| "cache poisoned")?;
+            for (stored, value) in entries.entry(site).or_insert_with(|| seed.to_vec()).iter() {
+                if hash(stored) == hash(&key)
+                    && stored.semantic_eq(&key).map_err(|e| e.to_string())?
+                {
+                    return Ok(value.clone());
+                }
+            }
+        }
+        let value = evaluate()?;
+        self.0
+            .lock()
+            .map_err(|_| "cache poisoned")?
+            .entry(site)
+            .or_default()
+            .push((key, value.clone()));
+        Ok(value)
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct Caches {
+    setup: BTreeMap<i32, Vec<(Value, Value)>>,
+    initial: BTreeMap<i32, Vec<(Value, Value)>>,
+    pub active: std::sync::Arc<Cache>,
+}
+
+impl Clone for Caches {
+    fn clone(&self) -> Self {
+        Self {
+            setup: self.setup.clone(),
+            initial: self.initial.clone(),
+            active: std::sync::Arc::new(Cache(Mutex::new(self.initial.clone()))),
+        }
+    }
+}
+
+impl Caches {
+    pub fn checkpoint(&self) -> Result<Self, String> {
+        let initial = self.active.0.lock().map_err(|_| "cache poisoned")?.clone();
+        Ok(Self {
+            setup: initial.clone(),
+            active: std::sync::Arc::new(Cache(Mutex::new(initial.clone()))),
+            initial,
+        })
+    }
+    pub fn begin_setup(&self) -> Result<(), String> {
+        *self.active.0.lock().map_err(|_| "cache poisoned")? = self.setup.clone();
+        Ok(())
+    }
+    pub fn reset(&self) -> Result<(), String> {
+        *self.active.0.lock().map_err(|_| "cache poisoned")? = self.initial.clone();
+        Ok(())
+    }
+    pub fn capture_setup(&mut self) -> Result<(), String> {
+        self.initial = self.active.0.lock().map_err(|_| "cache poisoned")?.clone();
+        Ok(())
+    }
+}

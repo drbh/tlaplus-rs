@@ -1,0 +1,11 @@
+[package]
+name = "tla-store"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+redb = "4.3"
+
+[dev-dependencies]
+tempfile = "3"

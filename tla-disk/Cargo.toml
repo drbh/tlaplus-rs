@@ -1,0 +1,13 @@
+[package]
+name = "tla-disk"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+tla-engine = { path = "../tla-engine" }
+tla-store = { path = "../tla-store" }
+tla-values = { path = "../tla-values" }
+
+[dev-dependencies]
+tempfile = "3"

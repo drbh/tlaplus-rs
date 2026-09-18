@@ -1,0 +1,8 @@
+[package]
+name = "tla-values"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dev-dependencies]
+tla-bridge = { path = "../tla-bridge" }

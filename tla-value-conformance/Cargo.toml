@@ -1,0 +1,11 @@
+[package]
+name = "tla-value-conformance"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dev-dependencies]
+tla-value-expr = { path = "../tla-value-expr" }
+tla-values = { path = "../tla-values" }
+tla-bridge = { path = "../tla-bridge" }
+serde_json = "1"

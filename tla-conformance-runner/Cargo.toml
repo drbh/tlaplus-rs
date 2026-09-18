@@ -1,0 +1,18 @@
+[package]
+name = "tla-conformance-runner"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dev-dependencies]
+tla-bridge = { path = "../tla-bridge" }
+tla-conformance = { path = "../tla-conformance" }
+tla-engine = { path = "../tla-engine" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+flate2 = "1"
+tla-disk = { path = "../tla-disk" }
+tla-store = { path = "../tla-store" }
+tempfile = "3"
+tla-model = { path = "../tla-model" }
+tla-values = { path = "../tla-values" }

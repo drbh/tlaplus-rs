@@ -1,0 +1,22 @@
+[package]
+name = "tla-bridge"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+description = "Development-only oracle adapters for the TLC rewrite"
+
+[dependencies]
+tla-ir = { path = "../tla-ir" }
+tla-model = { path = "../tla-model" }
+tla-sany-semantic = { path = "../../tlaplus-rs-explore/crates/tla-sany-semantic" }
+tla-values = { path = "../tla-values" }
+tla-engine = { path = "../tla-engine" }
+tla-oracle = { path = "../tla-oracle" }
+tla-tlc = { path = "../../tlaplus-rs-explore/crates/tla-tlc" }
+tla-tlc-eval = { path = "../../tlaplus-rs-explore/crates/tla-tlc-eval" }
+tla-tlc-value = { path = "../../tlaplus-rs-explore/crates/tla-tlc-value" }
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+tla-conformance = { path = "../tla-conformance" }
+serde_json = "1"

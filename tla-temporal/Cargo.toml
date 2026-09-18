@@ -1,0 +1,13 @@
+[package]
+name = "tla-temporal"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+tla-syntax = { path = "../tla-syntax" }
+tla-modules = { path = "../tla-modules" }
+tla-props = { path = "../tla-props" }
+tla-ir = { path = "../tla-ir" }
+tla-model = { path = "../tla-model" }
+tla-behavior = { path = "../tla-behavior" }

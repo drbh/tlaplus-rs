@@ -1,0 +1,13 @@
+[package]
+name = "tla-library"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+tla-ir = { path = "../tla-ir" }
+tla-values = { path = "../tla-values" }
+tla-value-expr = { path = "../tla-value-expr" }
+
+[dev-dependencies]
+tla-bridge = { path = "../tla-bridge" }

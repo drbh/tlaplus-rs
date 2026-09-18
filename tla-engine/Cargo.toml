@@ -1,0 +1,9 @@
+[package]
+name = "tla-engine"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+description = "Exact breadth-first exploration of transition systems"
+
+[dependencies]
+rayon = "1.12"

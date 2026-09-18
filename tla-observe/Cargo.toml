@@ -1,0 +1,9 @@
+[package]
+name = "tla-observe"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+tla-engine = { path = "../tla-engine" }
+serde_json = "1"

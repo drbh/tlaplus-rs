@@ -1,0 +1,9 @@
+[package]
+name = "tla-value-expr"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+tla-values = { path = "../tla-values" }
+serde_json = "1"
