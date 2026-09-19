@@ -302,6 +302,10 @@ fn sort<T>(values: &mut [T], key: impl Fn(&T) -> &Value) -> Result<(), Error> {
 }
 
 impl Value {
+    /// A set or function, as opposed to a scalar.
+    pub fn is_compound(&self) -> bool {
+        matches!(self, Self::Set(_) | Self::Function(_))
+    }
     /// The 1-based position of `index` in a tuple, as TLA+ numbers its elements.
     pub fn position(index: usize) -> Self {
         Self::Int(i32::try_from(index + 1).expect("tuple position fits an i32"))

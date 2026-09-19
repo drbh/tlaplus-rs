@@ -1,6 +1,8 @@
 //! The structured forms of the IR: operator calls, binders over enumerated
 //! domains, `EXCEPT`, `CASE` and the string forms of sequence operators.
-use crate::{Error, Evaluator, bind, deferred, functional};
+use crate::{
+    Error, Evaluator, deferred, functional, functional::with_binding, functional::with_bindings,
+};
 use tla_ir::{Builtin, Expr, ExprId, Quantifier};
 use tla_values::Value;
 
@@ -27,11 +29,10 @@ impl Evaluator<'_> {
             .iter()
             .map(|id| self.eval(*id, locals, depth + 1))
             .collect::<Result<Vec<_>, _>>()?;
-        let mut nested = locals.clone();
-        for (&slot, value) in op.parameters.iter().zip(values) {
-            bind(&mut nested, slot, value);
-        }
-        self.eval(op.body, &mut nested, depth + 1)
+        let bindings = op.parameters.iter().copied().zip(values).collect();
+        with_bindings(locals, bindings, |locals| {
+            self.eval(op.body, locals, depth + 1)
+        })
     }
 
     /// `[f EXCEPT ![path] = value, ...]`: each update is a `<<path, value>>`
@@ -189,9 +190,9 @@ impl Evaluator<'_> {
         let mut output = Vec::new();
         for value in &domain {
             deferred::validate_tuple_binding(self, body, slot, value, strict)?;
-            let mut nested = locals.clone();
-            bind(&mut nested, slot, value.clone());
-            let result = self.eval(body, &mut nested, depth + 1)?;
+            let result = with_binding(locals, slot, value.clone(), |locals| {
+                self.eval(body, locals, depth + 1)
+            })?;
             match kind {
                 Quantifier::Exists if result.boolean()? => return Ok(Value::Bool(true)),
                 Quantifier::ForAll if !result.boolean()? => return Ok(Value::Bool(false)),
@@ -221,9 +222,10 @@ impl Evaluator<'_> {
         for key in &domain {
             // Every element must be mapped, so a tuple pattern must fit exactly.
             deferred::validate_tuple_binding(self, body, slot, key, true)?;
-            let mut nested = locals.clone();
-            bind(&mut nested, slot, key.clone());
-            entries.push((key.clone(), self.eval(body, &mut nested, depth + 1)?));
+            let value = with_binding(locals, slot, key.clone(), |locals| {
+                self.eval(body, locals, depth + 1)
+            })?;
+            entries.push((key.clone(), value));
         }
         Ok(Value::function(entries)?)
     }
@@ -247,9 +249,11 @@ impl Evaluator<'_> {
             // The lowering narrowed the domain to tuples the pattern
             // destructures; an element that still does not fit is an error.
             deferred::validate_tuple_binding(self, body, slot, value, true)?;
-            let mut nested = locals.clone();
-            bind(&mut nested, slot, value.clone());
-            if self.eval(body, &mut nested, depth + 1)?.boolean()? {
+            let holds = with_binding(locals, slot, value.clone(), |locals| {
+                self.eval(body, locals, depth + 1)
+            })?
+            .boolean()?;
+            if holds {
                 return Ok(value.clone());
             }
         }

@@ -318,7 +318,7 @@ pub fn json(expr: &Expr, mode: JsonMode) -> Result<String, Error> {
             mode,
         ),
         Expr::Canonical(Value::Function(_) | Value::Set(_)) => {
-            json(&Expr::atom(expr.normalize(100_000)?), mode)
+            json(&Expr::expanded(expr.normalize(100_000)?), mode)
         }
         _ if mode != JsonMode::Object => joined(
             expr.sorted(100_000)?

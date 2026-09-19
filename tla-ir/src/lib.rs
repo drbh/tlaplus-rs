@@ -6,6 +6,7 @@ mod builtins;
 mod transform;
 
 pub use builtins::{Builtin, Quantifier};
+use std::collections::HashMap;
 use std::fmt;
 
 pub type ExprId = usize;
@@ -137,6 +138,131 @@ pub struct Program {
     /// Temporary next-state slots for ENABLED, excluded from stored states.
     pub enabled_variables: usize,
     pub constants: Vec<String>,
+    /// Memo of which binder bodies destructure their bound local as a tuple;
+    /// see [`Program::tuple_pattern`].
+    pub tuple_patterns: PatternCache,
+}
+
+/// A lazily filled memo over immutable nodes. It is not part of a program's
+/// identity: a clone starts empty and every cache compares equal.
+#[derive(Default)]
+pub struct PatternCache(std::sync::Mutex<PatternMap>);
+
+type PatternMap =
+    HashMap<(ExprId, usize), Option<usize>, std::hash::BuildHasherDefault<PairHasher>>;
+
+/// Hashes a pair of small integers by multiplication; the memo is looked up
+/// once per bound element, so the standard hasher's cost would show.
+#[derive(Default)]
+pub struct PairHasher(u64);
+
+impl std::hash::Hasher for PairHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+    fn write(&mut self, bytes: &[u8]) {
+        for byte in bytes {
+            self.0 = (self.0 ^ u64::from(*byte)).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+        }
+    }
+    fn write_usize(&mut self, value: usize) {
+        self.0 = (self.0 ^ value as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    }
+}
+
+impl Clone for PatternCache {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+
+impl PartialEq for PatternCache {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+impl Eq for PatternCache {}
+
+impl fmt::Debug for PatternCache {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("PatternCache")
+    }
+}
+
+impl Program {
+    /// The tuple arity `body` destructures local `slot` into, if it does:
+    /// the arity of the first `Destructure` of that local found in `body`.
+    /// Computed once per body and slot, since nodes never change once pushed.
+    pub fn tuple_pattern(&self, body: ExprId, slot: usize) -> Option<usize> {
+        if let Some(found) = self
+            .tuple_patterns
+            .0
+            .lock()
+            .expect("pattern cache poisoned")
+            .get(&(body, slot))
+        {
+            return *found;
+        }
+        let mut pending = vec![body];
+        let mut seen = std::collections::HashSet::new();
+        let mut found = None;
+        while let Some(id) = pending.pop() {
+            if !seen.insert(id) {
+                continue;
+            }
+            let Some(node) = self.nodes.get(id) else {
+                continue;
+            };
+            match &node.expr {
+                Expr::Scoped { current, .. } => pending.push(*current),
+                Expr::Apply {
+                    op: Builtin::Destructure | Builtin::DestructureExact,
+                    args,
+                } if args.len() == 2 => {
+                    if matches!(self.nodes[args[0]].expr, Expr::Local(local) if local == slot)
+                        && let Expr::Literal(Literal::Int(arity)) = &self.nodes[args[1]].expr
+                    {
+                        found = Some(usize::try_from(*arity).unwrap_or(usize::MAX));
+                        break;
+                    }
+                    pending.extend(args);
+                }
+                Expr::Apply { args, .. } | Expr::Call { args, .. } => pending.extend(args),
+                Expr::If {
+                    condition,
+                    then_expr,
+                    else_expr,
+                } => pending.extend([condition, then_expr, else_expr]),
+                Expr::Invoke { function, args, .. } => {
+                    pending.push(*function);
+                    pending.extend(args);
+                }
+                Expr::Quantify { domain, body, .. }
+                | Expr::Function { domain, body, .. }
+                | Expr::RecursiveFunction { domain, body, .. }
+                | Expr::Choose { domain, body, .. } => {
+                    pending.extend(domain);
+                    pending.push(*body);
+                }
+                Expr::Except {
+                    function,
+                    key,
+                    value,
+                } => pending.extend([function, key, value]),
+                Expr::Lambda { body, .. } | Expr::AssertError { body, .. } => {
+                    pending.push(*body);
+                }
+                _ => {}
+            }
+        }
+        self.tuple_patterns
+            .0
+            .lock()
+            .expect("pattern cache poisoned")
+            .insert((body, slot), found);
+        found
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

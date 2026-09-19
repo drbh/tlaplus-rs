@@ -282,3 +282,45 @@ pub fn bind(locals: &mut Vec<Option<Value>>, slot: usize, value: Value) {
     }
     locals[slot] = Some(value);
 }
+
+/// Runs `body` with `slot` bound to `value`, then restores the environment
+/// exactly as it was, including its length. Binders use this instead of
+/// copying the whole environment for every element they range over.
+pub fn with_binding<R>(
+    locals: &mut Vec<Option<Value>>,
+    slot: usize,
+    value: Value,
+    body: impl FnOnce(&mut Vec<Option<Value>>) -> R,
+) -> R {
+    let length = locals.len();
+    let previous = locals.get_mut(slot).and_then(Option::take);
+    bind(locals, slot, value);
+    let result = body(locals);
+    locals[slot] = previous;
+    locals.truncate(length);
+    result
+}
+
+/// Like [`with_binding`], for several slots at once.
+pub fn with_bindings<R>(
+    locals: &mut Vec<Option<Value>>,
+    bindings: Vec<(usize, Value)>,
+    body: impl FnOnce(&mut Vec<Option<Value>>) -> R,
+) -> R {
+    let length = locals.len();
+    let saved: Vec<_> = bindings
+        .into_iter()
+        .map(|(slot, value)| {
+            let previous = locals.get_mut(slot).and_then(Option::take);
+            bind(locals, slot, value);
+            (slot, previous)
+        })
+        .collect();
+    let result = body(locals);
+    // Restored in reverse so that a slot bound twice gets its first value back.
+    for (slot, previous) in saved.into_iter().rev() {
+        locals[slot] = previous;
+    }
+    locals.truncate(length);
+    result
+}

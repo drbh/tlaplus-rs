@@ -75,6 +75,20 @@ pub struct Transition<S> {
     pub state: S,
 }
 
+/// A successor with the per-state checks already made: its key when a
+/// constraint allows it, and the invariant or action property it violates.
+/// Making these off the coordinator thread is what parallel exploration
+/// parallelizes, since inserting into the state graph is cheap by comparison.
+pub struct Admitted<S, K> {
+    pub transition: Transition<S>,
+    pub key: Option<K>,
+    /// The violated invariant, if any; `None` when not yet checked, which
+    /// the coordinator then does for states it has not seen.
+    pub invariant: Option<Option<String>>,
+    /// The violated action property, if any; `None` when not yet checked.
+    pub action_property: Option<Option<String>>,
+}
+
 /// Keys identify quotient states; `same_state` compares raw states for trace validation.
 pub trait TransitionSystem {
     type State: Clone;

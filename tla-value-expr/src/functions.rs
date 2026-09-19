@@ -79,12 +79,19 @@ impl Expr {
     }
     pub fn apply(&self, argument: &Self) -> Result<Self, Error> {
         let argument = Self::atom(argument.normalize(100_000)?);
-        for (key, value) in self.entries()? {
-            if Self::atom(key).semantic_eq(&argument)? {
-                return Ok(value);
+        // An explicit function, in either shape, is searched in place; other
+        // forms enumerate their entries first.
+        match self {
+            Self::Function { entries, .. } => {
+                find_entry(entries.iter().map(|(k, v)| (k, v)), &argument)?.cloned()
             }
+            Self::Canonical(Value::Function(entries)) => {
+                find_entry(entries.iter().map(|(k, v)| (k, v)), &argument)?
+                    .map(|v| Self::atom(v.clone()))
+            }
+            _ => find_entry(self.entries()?.into_iter(), &argument)?,
         }
-        Err(Error::Undefined)
+        .ok_or(Error::Undefined)
     }
     pub fn domain(&self) -> Result<Self, Error> {
         Ok(Self::Set(
@@ -121,8 +128,16 @@ impl Expr {
         };
         let (kind, mut entries) = match self {
             Self::Function { kind, entries } => (*kind, entries.clone()),
+            Self::Canonical(value @ Value::Function(_)) => {
+                return Self::expanded(value.clone()).except(path, replacement);
+            }
             _ => return Err(Error::Type("function")),
         };
+        // These cases reproduce TLC's `EXCEPT` on its special function
+        // forms, which the differential corpus checks: a tuple or record
+        // updated at a key of the wrong type yields the replacement itself,
+        // and an interval-keyed function updated at a non-integer is
+        // unchanged.
         if kind == FunctionKind::Tuple && !matches!(head, Value::Int(_)) {
             return Ok(replacement);
         }
@@ -138,6 +153,8 @@ impl Expr {
                 return Ok(Self::Function { kind, entries });
             }
         }
+        // A tuple updated at a missing index loses every element, as TLC
+        // reports it.
         if kind == FunctionKind::Tuple {
             for (_, value) in &mut entries {
                 *value = Self::Undefined;
@@ -146,6 +163,19 @@ impl Expr {
         }
         Ok(self.clone())
     }
+}
+
+/// The value whose key equals `argument`, with TLC's comparison errors.
+fn find_entry<K: std::borrow::Borrow<Value>, V>(
+    entries: impl Iterator<Item = (K, V)>,
+    argument: &Expr,
+) -> Result<Option<V>, Error> {
+    for (key, value) in entries {
+        if Expr::atom(key.borrow().clone()).semantic_eq(argument)? {
+            return Ok(Some(value));
+        }
+    }
+    Ok(None)
 }
 
 pub fn quoted(text: &str) -> String {
@@ -174,7 +204,7 @@ pub fn stringify(expr: &Expr) -> Result<String, Error> {
         Expr::Canonical(Value::Int(v)) => Ok(v.to_string()),
         Expr::Canonical(Value::String(a)) => Ok(quoted(&a.text)),
         Expr::Canonical(Value::Model(a)) => Ok(a.text.to_string()),
-        Expr::Canonical(v) => stringify(&Expr::atom(v.clone())),
+        Expr::Canonical(v) => stringify(&Expr::expanded(v.clone())),
         Expr::Interval(low, high) => Ok(format!("{low}..{high}")),
         Expr::Infinite(kind) => Ok(match kind {
             InfiniteSet::Any => "ANY",

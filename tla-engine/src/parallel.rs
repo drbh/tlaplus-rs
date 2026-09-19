@@ -1,4 +1,5 @@
-use crate::{Options, Report, TransitionSystem, search};
+use crate::serial::admit;
+use crate::{Admitted, Options, Report, TransitionSystem, search};
 use rayon::prelude::*;
 use std::num::NonZeroUsize;
 
@@ -11,7 +12,7 @@ where
     T: TransitionSystem + Sync,
     T::State: Send + Sync,
     T::Error: Send,
-    T::Key: Send,
+    T::Key: Send + Sync,
 {
     system.prepare_parallel(workers)?;
     if workers.get() > 1 && system.parallel_callbacks() {
@@ -24,21 +25,32 @@ where
         .num_threads(workers.get())
         .build()
         .expect("create evaluator worker pool");
-    // Failed expansions replay lazily on the coordinator, preserving early violations.
+    // Successors and their checks are made on the pool; a failed expansion
+    // replays lazily on the coordinator, preserving early violations.
+    let expand = |state: &T::State,
+                  visited: &std::collections::HashMap<T::Key, usize>|
+     -> Option<Vec<Admitted<T::State, T::Key>>> {
+        system
+            .successors(state)
+            .and_then(|transitions| {
+                transitions
+                    .into_iter()
+                    .map(|transition| admit(system, options, Some(visited), state, transition))
+                    .collect()
+            })
+            .ok()
+    };
     search(
         system,
         options,
-        |states| {
+        |states, visited| {
             if states.len() < 2 {
-                return states
-                    .iter()
-                    .map(|state| system.successors(state).ok())
-                    .collect();
+                return states.iter().map(|s| expand(s, visited)).collect();
             }
             pool.install(|| {
                 states
                     .par_iter()
-                    .map(|state| system.successors(state).ok())
+                    .map(|s| expand(s, visited))
                     .collect::<Vec<_>>()
             })
         },
@@ -84,12 +96,16 @@ where
                 }
                 let mut produced = false;
                 let result = system.visit_successors(current, &mut |transition| {
+                    // `visited` lives under the lock, so the invariant and
+                    // property checks stay with the coordinator here; only
+                    // constraints and keys are made on the worker.
+                    let admitted = admit(system, options, None, current, transition)?;
                     let mut search = search.lock().expect("search lock poisoned");
                     if search.halted {
                         return Ok(std::ops::ControlFlow::Break(()));
                     }
                     produced = true;
-                    match search.transition(*from, transition) {
+                    match search.transition(*from, admitted) {
                         Ok(flow) => Ok(flow),
                         Err(error) => {
                             search.fail(error);

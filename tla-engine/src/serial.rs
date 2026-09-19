@@ -1,6 +1,6 @@
 use crate::{
-    Completion, Edge, Node, Options, Report, Statistics, Trace, Transition, TransitionSystem,
-    Violation, ViolationKind,
+    Admitted, Completion, Edge, Node, Options, Report, Statistics, Trace, Transition,
+    TransitionSystem, Violation, ViolationKind,
 };
 use std::ops::ControlFlow;
 use std::{collections::HashMap, num::NonZeroUsize, time::Instant};
@@ -19,7 +19,7 @@ fn replay_trace<T: TransitionSystem>(
     let replay = search(
         system,
         &options,
-        |states| states.iter().map(|_| None).collect(),
+        |states, _| states.iter().map(|_| None).collect(),
         Some(depth),
         NonZeroUsize::MAX,
     )?;
@@ -52,7 +52,7 @@ pub(crate) fn explore<T: TransitionSystem>(
     search(
         system,
         options,
-        |states| states.iter().map(|_| None).collect(),
+        |states, _| states.iter().map(|_| None).collect(),
         None,
         NonZeroUsize::MAX,
     )
@@ -252,36 +252,37 @@ impl<'a, T: TransitionSystem> Search<'a, T> {
         Ok(ControlFlow::Continue(()))
     }
 
+    /// Records an admitted successor of `from`: a violation it carries, and
+    /// the state itself when it is new.
     pub fn transition(
         &mut self,
         from: usize,
-        transition: Transition<T::State>,
+        admitted: Admitted<T::State, T::Key>,
     ) -> Result<ControlFlow<()>, T::Error> {
         self.report.statistics.generated += 1;
-        let current = &self.report.nodes[from].state;
-        let state = &transition.state;
-        let allowed =
-            self.system.state_allowed(state)? && self.system.step_allowed(current, state)?;
-        let key = if allowed {
-            Some(self.system.key(state)?)
-        } else {
-            None
-        };
+        let Admitted {
+            transition,
+            key,
+            invariant,
+            action_property,
+        } = admitted;
         let seen = key.as_ref().and_then(|key| self.visited.get(key)).copied();
-        let invariant = if seen.is_none() {
-            self.system.invariant(state)?
-        } else {
-            None
+        // A state seen before had its invariant checked when first stored.
+        let invariant = match (seen, invariant) {
+            (Some(_), _) => None,
+            (None, Some(checked)) => checked,
+            (None, None) => self.system.invariant(&transition.state)?,
         };
-        let continuing = self.options.continue_after_violation;
-        let action = if invariant.is_none() || continuing {
-            self.system.action_property(current, state)?
-        } else {
-            None
+        let action_property = match action_property {
+            Some(checked) => checked,
+            None if invariant.is_none() || self.options.continue_after_violation => self
+                .system
+                .action_property(&self.report.nodes[from].state, &transition.state)?,
+            None => None,
         };
         let failures = [
             invariant.map(ViolationKind::Invariant),
-            action.map(ViolationKind::ActionProperty),
+            action_property.map(ViolationKind::ActionProperty),
         ];
         for kind in failures.into_iter().flatten() {
             let mut trace = self.report.trace_to(from);
@@ -342,10 +343,56 @@ impl<'a, T: TransitionSystem> Search<'a, T> {
     }
 }
 
+/// Makes the checks for one successor of `current`: constraints decide
+/// whether it gets a key; with the `visited` states in hand the invariant
+/// is checked for states not seen before (as TLC does, a constraint only
+/// stops exploration), and the action property unless an invariant already
+/// failed and the search would stop there. Without `visited` those two are
+/// left for the coordinator.
+pub(crate) fn admit<T: TransitionSystem>(
+    system: &T,
+    options: &Options,
+    visited: Option<&HashMap<T::Key, usize>>,
+    current: &T::State,
+    transition: Transition<T::State>,
+) -> Result<Admitted<T::State, T::Key>, T::Error> {
+    let state = &transition.state;
+    let allowed = system.state_allowed(state)? && system.step_allowed(current, state)?;
+    let key = if allowed {
+        Some(system.key(state)?)
+    } else {
+        None
+    };
+    let Some(visited) = visited else {
+        return Ok(Admitted {
+            transition,
+            key,
+            invariant: None,
+            action_property: None,
+        });
+    };
+    let seen = key.as_ref().is_some_and(|key| visited.contains_key(key));
+    let invariant = if seen { None } else { system.invariant(state)? };
+    let action_property = if invariant.is_none() || options.continue_after_violation {
+        system.action_property(current, state)?
+    } else {
+        None
+    };
+    Ok(Admitted {
+        transition,
+        key,
+        invariant: Some(invariant),
+        action_property: Some(action_property),
+    })
+}
+
 pub(crate) fn search<T: TransitionSystem>(
     system: &T,
     options: &Options,
-    mut expand: impl FnMut(&[T::State]) -> Vec<Option<Vec<Transition<T::State>>>>,
+    mut expand: impl FnMut(
+        &[T::State],
+        &HashMap<T::Key, usize>,
+    ) -> Vec<Option<Vec<Admitted<T::State, T::Key>>>>,
     max_depth: Option<usize>,
     batch_size: NonZeroUsize,
 ) -> Result<Report<T::State>, T::Error> {
@@ -362,7 +409,7 @@ pub(crate) fn search<T: TransitionSystem>(
                 .iter()
                 .map(|&i| search.report.nodes[i].state.clone())
                 .collect();
-            let layers = expand(&states);
+            let layers = expand(&states, &search.visited);
             for ((from, current), transitions) in batch.iter().copied().zip(states).zip(layers) {
                 let mut produced = false;
                 let mut visit = |transition| {
@@ -378,7 +425,9 @@ pub(crate) fn search<T: TransitionSystem>(
                         }
                     }
                     None => {
-                        let _ = system.visit_successors(&current, &mut visit)?;
+                        let _ = system.visit_successors(&current, &mut |transition| {
+                            visit(admit(system, options, None, &current, transition)?)
+                        })?;
                     }
                 }
                 search.expanded(from, produced);

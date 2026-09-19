@@ -1,6 +1,7 @@
 use crate::deferred::runtime;
-use crate::functional::{LIMIT, projected};
-use crate::{Error, Evaluator, Value, bind};
+use crate::functional::with_binding;
+use crate::functional::{LIMIT, projected, with_bindings};
+use crate::{Error, Evaluator, Value};
 use tla_ir::{Builtin as B, Expr as Ir, ExprId};
 use tla_value_expr::Expr;
 
@@ -54,6 +55,31 @@ fn applied_inner(
     if depth >= evaluator.recursion_limit {
         return Err(Error("recursion limit exceeded".into()));
     }
+    // A function held in a variable, constant or local, possibly behind
+    // `ENABLED` scoping, needs no projection of the environment: apply its
+    // value directly, as the generic arm would.
+    let mut target = id;
+    while let Some(Ir::Scoped { current, .. }) =
+        evaluator.program.nodes.get(target).map(|n| &n.expr)
+    {
+        target = *current;
+    }
+    let direct = match &evaluator.program.nodes.get(target).map(|n| &n.expr) {
+        Some(Ir::Local(slot)) => locals.get(*slot).cloned().flatten(),
+        Some(Ir::Variable { slot, primed }) => {
+            let state = if *primed {
+                evaluator.next
+            } else {
+                evaluator.state
+            };
+            state.get(*slot).cloned().flatten()
+        }
+        Some(Ir::Constant(slot)) => evaluator.constants.get(*slot).cloned(),
+        _ => None,
+    };
+    if let Some(function) = direct {
+        return tla_library::apply(&Expr::atom(function), argument);
+    }
     let (id, mut captures) = projected(evaluator, id, locals, depth + 1)?;
     let locals = &mut captures;
     let node = evaluator
@@ -70,9 +96,10 @@ fn applied_inner(
                 let value = runtime(evaluator, id, locals, depth + 1)?;
                 return Err(Error(tla_library::function_domain_error(&value, argument)?));
             }
-            let mut nested = locals.clone();
-            bind(&mut nested, *slot, argument.normalize(LIMIT)?);
-            runtime(evaluator, *body, &mut nested, depth + 1)
+            let argument = argument.normalize(LIMIT)?;
+            with_binding(locals, *slot, argument, |locals| {
+                runtime(evaluator, *body, locals, depth + 1)
+            })
         }
         Ir::Apply {
             op: B::Except,
@@ -187,13 +214,16 @@ pub(crate) fn member(
                 )? {
                     return Ok(false);
                 }
-                let mut nested = locals.clone();
-                bind(&mut nested, *slot, value.normalize(LIMIT)?);
-                Ok(evaluator.eval(*body, &mut nested, depth + 1)?.boolean()?)
+                let value = value.normalize(LIMIT)?;
+                Ok(with_binding(locals, *slot, value, |locals| {
+                    evaluator.eval(*body, locals, depth + 1)
+                })?
+                .boolean()?)
             }
             Ir::Call { operator, args } => {
-                let (body, mut nested) = enter(evaluator, *operator, args, locals, depth)?;
-                member(evaluator, body, value, &mut nested, depth + 1)
+                entered(evaluator, *operator, args, locals, depth, |body, locals| {
+                    member(evaluator, body, value, locals, depth + 1)
+                })?
             }
             Ir::If {
                 condition,
@@ -248,14 +278,17 @@ pub(crate) fn member(
     })
 }
 
-/// An operator's body and the locals binding its parameters to evaluated arguments.
-pub(crate) fn enter(
+/// Runs `body` on an operator's body with its parameters bound to the
+/// evaluated arguments, then restores the environment. Arguments are
+/// evaluated in the caller's environment before any parameter is bound.
+pub(crate) fn entered<R>(
     evaluator: &Evaluator<'_>,
     operator: usize,
     args: &[ExprId],
-    locals: &[Option<Value>],
+    locals: &mut Vec<Option<Value>>,
     depth: usize,
-) -> Result<(ExprId, Vec<Option<Value>>), Error> {
+    body: impl FnOnce(ExprId, &mut Vec<Option<Value>>) -> R,
+) -> Result<R, Error> {
     let op = evaluator
         .program
         .operators
@@ -264,10 +297,12 @@ pub(crate) fn enter(
     if op.parameters.len() != args.len() {
         return Err(Error("operator arity mismatch".into()));
     }
-    let mut nested = locals.to_vec();
-    for (slot, arg) in op.parameters.iter().zip(args) {
-        let value = evaluator.eval(*arg, &mut locals.to_vec(), depth + 1)?;
-        bind(&mut nested, *slot, value);
-    }
-    Ok((op.body, nested))
+    let values = args
+        .iter()
+        .map(|arg| evaluator.eval(*arg, locals, depth + 1))
+        .collect::<Result<Vec<_>, _>>()?;
+    let bindings = op.parameters.iter().copied().zip(values).collect();
+    Ok(with_bindings(locals, bindings, |locals| {
+        body(op.body, locals)
+    }))
 }

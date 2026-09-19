@@ -27,6 +27,11 @@ impl Expr {
     }
 
     pub fn contains(&self, value: &Self) -> Result<bool, Error> {
+        if let Self::Canonical(model @ Value::Model(_)) = value
+            && self.members_have_shape()
+        {
+            return Self::model_membership(model);
+        }
         match self {
             Self::Canonical(v) => v.contains(&value.normalize(100_000)?),
             Self::Set(values) => {
@@ -40,9 +45,6 @@ impl Expr {
             Self::Interval(low, high) if high < low => Ok(false),
             Self::Interval(low, high) => match value {
                 Self::Canonical(Value::Int(n)) => Ok(low <= n && n <= high),
-                Self::Canonical(Value::Model(v)) => {
-                    Value::Model(v.clone()).semantic_eq(&Value::Int(*low))
-                }
                 _ => Err(Error::Type("integer")),
             },
             Self::Binary(SetOp::Union, a, b) => Ok(a.contains(value)? || b.contains(value)?),
@@ -65,9 +67,6 @@ impl Expr {
                 Ok(true)
             }
             Self::Functions { domain, range } => {
-                if let Self::Canonical(Value::Model(v)) = value {
-                    return Value::Model(v.clone()).semantic_eq(&Value::Int(0));
-                }
                 let entries = value.entries()?;
                 if !domain.semantic_eq(&value.domain()?)? {
                     return Ok(false);
@@ -80,9 +79,6 @@ impl Expr {
                 Ok(true)
             }
             Self::Product(sets) => {
-                if let Self::Canonical(Value::Model(v)) = value {
-                    return Value::Model(v.clone()).semantic_eq(&Value::Int(0));
-                }
                 let values = match value.sequence() {
                     Ok(v) => v,
                     Err(_) => {
@@ -113,9 +109,6 @@ impl Expr {
                 ) || matches!(value,Self::Lambda(domain) if matches!(domain.as_ref(),Self::Interval(..)))
                 {
                     return Err(Error::Type("record"));
-                }
-                if let Self::Canonical(Value::Model(v)) = value {
-                    return Value::Model(v.clone()).semantic_eq(&Value::Int(0));
                 }
                 let entries = value.entries()?;
                 if entries.iter().any(|(k, _)| !matches!(k, Value::String(_))) {
@@ -165,15 +158,9 @@ impl Expr {
                 (InfiniteSet::Integers, Self::Canonical(Value::Int(_))) => Ok(true),
                 (InfiniteSet::Naturals, Self::Canonical(Value::Int(n))) => Ok(*n >= 0),
                 (InfiniteSet::Strings, Self::Canonical(Value::String(_))) => Ok(true),
-                (_, Self::Canonical(Value::Model(v))) => {
-                    Value::Model(v.clone()).semantic_eq(&Value::Int(0))
-                }
                 _ => Err(Error::Type("infinite set member")),
             },
             Self::Sequences(base) => {
-                if let Self::Canonical(Value::Model(v)) = value {
-                    return Value::Model(v.clone()).semantic_eq(&Value::Int(0));
-                }
                 for member in value.sequence()? {
                     if !base.contains(&member)? {
                         return Ok(false);
@@ -442,6 +429,7 @@ impl Expr {
     pub fn empty(&self) -> Result<bool, Error> {
         match self {
             Self::Set(values) => Ok(values.is_empty()),
+            Self::Canonical(Value::Set(values)) => Ok(values.is_empty()),
             Self::Interval(low, high) => Ok(high < low),
             Self::Subsets { base, size } => Ok(size.is_some_and(|k| k < 0)
                 || size.is_some_and(|k| base.size().is_ok_and(|n| k as usize > n))),

@@ -1,8 +1,12 @@
+use crate::functional::with_binding;
 use crate::sets::{applied, member};
 use crate::{Error, Evaluator, Value, bind};
 use tla_ir::{Builtin as B, Expr as Ir, ExprId};
 use tla_value_expr::{Expr, FunctionKind, InfiniteSet, SetOp};
 const LIMIT: usize = 100_000;
+/// Checks a value bound to `slot` against the tuple pattern `id` destructures
+/// it with, if any: the value must have at least the pattern's arity, or
+/// exactly it when `exact`.
 pub(crate) fn validate_tuple_binding(
     evaluator: &Evaluator<'_>,
     id: ExprId,
@@ -10,59 +14,12 @@ pub(crate) fn validate_tuple_binding(
     value: &Value,
     exact: bool,
 ) -> Result<(), Error> {
-    let mut pending = vec![id];
-    let mut seen = std::collections::HashSet::new();
-    while let Some(id) = pending.pop() {
-        if !seen.insert(id) {
-            continue;
-        }
-        let node = evaluator
-            .program
-            .nodes
-            .get(id)
-            .ok_or_else(|| Error("invalid expression".into()))?;
-        let children: Vec<ExprId> = match &node.expr {
-            Ir::Scoped { current, .. } => vec![*current],
-            Ir::Apply {
-                op: B::Destructure | B::DestructureExact,
-                args,
-            } if args.len() == 2 => {
-                if matches!(evaluator.program.nodes[args[0]].expr, Ir::Local(local) if local == slot)
-                {
-                    let expected = evaluator.eval(args[1], &mut Vec::new(), 0)?.integer()?;
-                    let actual = value.sequence()?.len();
-                    let expected = usize::try_from(expected).unwrap_or(usize::MAX);
-                    if actual < expected || (exact && actual != expected) {
-                        return Err(Error("tuple pattern arity mismatch".into()));
-                    }
-                }
-                args.clone()
-            }
-            Ir::Apply { args, .. } => args.clone(),
-            Ir::If {
-                condition,
-                then_expr,
-                else_expr,
-            } => vec![*condition, *then_expr, *else_expr],
-            Ir::Call { args, .. } => args.clone(),
-            Ir::Invoke { function, args, .. } => {
-                let mut children = vec![*function];
-                children.extend(args);
-                children
-            }
-            Ir::Quantify { domain, body, .. }
-            | Ir::Function { domain, body, .. }
-            | Ir::RecursiveFunction { domain, body, .. }
-            | Ir::Choose { domain, body, .. } => domain.iter().copied().chain([*body]).collect(),
-            Ir::Except {
-                function,
-                key,
-                value,
-            } => vec![*function, *key, *value],
-            Ir::Lambda { body, .. } | Ir::AssertError { body, .. } => vec![*body],
-            _ => Vec::new(),
-        };
-        pending.extend(children);
+    let Some(expected) = evaluator.program.tuple_pattern(id, slot) else {
+        return Ok(());
+    };
+    let actual = value.sequence()?.len();
+    if actual < expected || (exact && actual != expected) {
+        return Err(Error("tuple pattern arity mismatch".into()));
     }
     Ok(())
 }
@@ -107,8 +64,9 @@ fn runtime_inner(
             locals,
         )?,
         Ir::Call { operator, args } => {
-            let (body, mut nested) = crate::sets::enter(evaluator, *operator, args, locals, depth)?;
-            evaluate(body, &mut nested)?
+            // The outer error is the call's own (arity, unknown operator);
+            // the inner one is the body's.
+            crate::sets::entered(evaluator, *operator, args, locals, depth, evaluate)??
         }
         Ir::Function { slot, domain, body } => {
             let domain = evaluate(
@@ -118,9 +76,10 @@ fn runtime_inner(
             let mut entries = Vec::new();
             for value in domain.sorted(LIMIT)? {
                 let value = value.normalize(LIMIT)?;
-                let mut nested = locals.clone();
-                bind(&mut nested, *slot, value.clone());
-                entries.push((value, evaluate(*body, &mut nested)?));
+                let image = with_binding(locals, *slot, value.clone(), |locals| {
+                    evaluate(*body, locals)
+                })?;
+                entries.push((value, image));
             }
             Expr::Function {
                 kind: FunctionKind::Lambda,

@@ -64,7 +64,17 @@ pub enum Expr {
     Undefined,
 }
 impl Expr {
+    /// A finite value as an expression. The value stays canonical and
+    /// shared; it is expanded into a set or function form only where an
+    /// operation needs that shape, so passing values through the deferred
+    /// layer costs nothing.
     pub fn atom(value: Value) -> Self {
+        Self::Canonical(value)
+    }
+    /// A value with its outermost set or function expanded into the
+    /// corresponding expression form, for operations and messages that
+    /// work on that shape.
+    pub fn expanded(value: Value) -> Self {
         match value {
             Value::Set(values) => Self::Set(values.iter().cloned().map(Self::atom).collect()),
             Value::Function(entries) => Self::Function {
@@ -76,6 +86,63 @@ impl Expr {
             },
             value => Self::Canonical(value),
         }
+    }
+    /// What a model value is compared with when this is the other operand.
+    /// A model value equals nothing but itself, and the value layer decides
+    /// whether comparing it with a non-model value is `false` or an error
+    /// for typed model values; so a canonical operand is used as is, and any
+    /// deferred form is represented by a placeholder non-model value.
+    pub(crate) fn against_model(&self) -> Value {
+        match self {
+            Self::Canonical(value) => value.clone(),
+            _ => Value::Int(0),
+        }
+    }
+    /// Prepares a deferred left operand for comparison with a model value
+    /// on the right. An infinite set answers for itself and returns `true`:
+    /// it is unequal to, and ordered after, any model value, typed or not,
+    /// which mirrors TLC where the set's own comparison runs first. Any
+    /// other operand returns `false` and is compared by the model value, a
+    /// finite set being enumerated first so that enumeration errors
+    /// surface, as in TLC.
+    fn answers_against_model(&self) -> Result<bool, Error> {
+        if matches!(self, Self::Infinite(_) | Self::Sequences(_)) {
+            return Ok(true);
+        }
+        if self.is_set() {
+            self.sorted(100_000)?;
+        }
+        Ok(false)
+    }
+    /// Whether a model value is a member of a set defined by the shape of
+    /// its members: never, though a typed model value makes the test an
+    /// error.
+    pub(crate) fn model_membership(model: &Value) -> Result<bool, Error> {
+        model.semantic_eq(&Value::Int(0))
+    }
+    /// Whether membership of this set is decided by the shape of the value:
+    /// an integer in a range, a function, tuple or record over given sets,
+    /// or a member of a built-in infinite set.
+    fn members_have_shape(&self) -> bool {
+        matches!(
+            self,
+            Self::Interval(..)
+                | Self::Functions { .. }
+                | Self::Product(_)
+                | Self::Records(_)
+                | Self::Infinite(_)
+                | Self::Sequences(_)
+        )
+    }
+    /// Whether this is a function in any form, canonical included.
+    pub(crate) fn is_function(&self) -> bool {
+        matches!(
+            self,
+            Self::Function { .. }
+                | Self::Lambda(_)
+                | Self::LambdaMulti { .. }
+                | Self::Canonical(Value::Function(_))
+        )
     }
     pub fn tuple(values: Vec<Self>) -> Self {
         Self::Function {
@@ -129,28 +196,29 @@ impl Expr {
             }
             return Ok(a.semantic_eq(c)? && b.semantic_eq(d)?);
         }
-        if let Self::Canonical(Value::Model(_)) = self {
-            return self
-                .normalize(100_000)?
-                .semantic_eq(&if let Self::Canonical(v) = other {
-                    v.clone()
-                } else {
-                    Value::Int(0)
-                });
+        if let Self::Canonical(model @ Value::Model(_)) = self {
+            return model.semantic_eq(&other.against_model());
         }
         if let Self::Canonical(Value::Model(_)) = other {
-            if matches!(self, Self::Infinite(_) | Self::Sequences(_)) {
+            if self.answers_against_model()? {
                 return Ok(false);
-            }
-            if self.is_set() {
-                self.sorted(100_000)?;
             }
             return other.semantic_eq(self);
         }
-        if matches!(
-            self,
-            Self::Function { .. } | Self::Lambda(_) | Self::LambdaMulti { .. }
-        ) {
+        if let (Self::Canonical(a), Self::Canonical(b)) = (self, other)
+            && (!matches!(a, Value::Int(_)) || matches!(b, Value::Int(_)))
+        {
+            // Incomparable canonical values are compared again in expanded
+            // form, which names the offending parts the way TLC does. An
+            // integer against a non-integer is reported below.
+            return match a.semantic_eq(b) {
+                Err(Error::Incomparable) if a.is_compound() || b.is_compound() => {
+                    Self::expanded(a.clone()).semantic_eq(&Self::expanded(b.clone()))
+                }
+                result => result,
+            };
+        }
+        if self.is_function() {
             self.check_record(other)?;
             let (a, b) = (self.entries()?, other.entries()?);
             if a.len() != b.len() {
@@ -183,7 +251,6 @@ impl Expr {
                     value: stringify(other)?,
                 })
             }
-            (Self::Canonical(a), Self::Canonical(b)) => a.semantic_eq(b),
             _ if self.is_set() && other.is_set() => {
                 let (a, b) = (self.sorted(100_000)?, other.sorted(100_000)?);
                 if a.len() != b.len() {
@@ -200,28 +267,24 @@ impl Expr {
         }
     }
     pub fn compare(&self, other: &Self) -> Result<Ordering, Error> {
-        if let Self::Canonical(Value::Model(_)) = self {
-            return self
-                .normalize(100_000)?
-                .compare(&if let Self::Canonical(v) = other {
-                    v.clone()
-                } else {
-                    Value::Int(0)
-                });
+        if let Self::Canonical(model @ Value::Model(_)) = self {
+            return model.compare(&other.against_model());
         }
         if let Self::Canonical(Value::Model(_)) = other {
-            if matches!(self, Self::Infinite(_) | Self::Sequences(_)) {
+            if self.answers_against_model()? {
                 return Ok(Ordering::Greater);
-            }
-            if self.is_set() {
-                self.sorted(100_000)?;
             }
             return Ok(other.compare(self)?.reverse());
         }
-        if matches!(
-            self,
-            Self::Function { .. } | Self::Lambda(_) | Self::LambdaMulti { .. }
-        ) {
+        if let (Self::Canonical(a), Self::Canonical(b)) = (self, other) {
+            return match a.compare(b) {
+                Err(Error::Incomparable) if a.is_compound() || b.is_compound() => {
+                    Self::expanded(a.clone()).compare(&Self::expanded(b.clone()))
+                }
+                result => result,
+            };
+        }
+        if self.is_function() {
             self.check_record(other)?;
             let (a, b) = (self.entries()?, other.entries()?);
             let size = a.len().cmp(&b.len());
@@ -272,7 +335,6 @@ impl Expr {
             };
         }
         match (self, other) {
-            (Self::Canonical(a), Self::Canonical(b)) => a.compare(b),
             _ if self.is_set() && other.is_set() => {
                 let (a, b) = (self.sorted(100_000)?, other.sorted(100_000)?);
                 let size = a.len().cmp(&b.len());
@@ -349,6 +411,7 @@ impl Expr {
                 n.checked_mul(d.size()?).ok_or(Error::Overflow)
             }),
             Self::Canonical(Value::Function(v)) => Ok(v.len()),
+            Self::Canonical(Value::Set(v)) => Ok(v.len()),
             Self::Interval(low, high) => {
                 Ok((i64::from(*high) - i64::from(*low) + 1).max(0) as usize)
             }
