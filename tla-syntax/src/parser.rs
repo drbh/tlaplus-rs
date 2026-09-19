@@ -333,6 +333,7 @@ pub fn module(source: &str) -> Result<Module, Diagnostic> {
         local_names: Vec::new(),
         modules: Vec::new(),
         declared_at: Vec::new(),
+        instance_origins: Vec::new(),
     };
     while !parser.peek().starts_with("====") {
         let keyword = parser.take()?;

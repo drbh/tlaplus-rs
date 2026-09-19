@@ -250,11 +250,14 @@ fn require_level(model: &BoundModel, id: ExprId, max: Level, what: &str) -> Resu
     Ok(())
 }
 
-/// `SYMMETRY`: a constant set of permutations of model values, each kept as
-/// its entries.
+/// `SYMMETRY`: a constant set of permutations of model values. Like TLC, the
+/// configured permutations generate a group, and every member of that group
+/// is applied when states are canonicalized, so `Permutations(A) \cup
+/// Permutations(B)` also covers permuting both at once.
 fn configure_symmetry(model: &mut BoundModel, id: ExprId) -> Result<(), Error> {
     require_level(model, id, Level::Constant, "SYMMETRY")?;
     let permutations = model.evaluate(id, &[], &[])?;
+    let mut generators = Vec::new();
     for permutation in permutations.elements().map_err(tla_model::Error::from)? {
         let entries = permutation
             .entries()
@@ -270,9 +273,63 @@ fn configure_symmetry(model: &mut BoundModel, id: ExprId) -> Result<(), Error> {
                 "SYMMETRY requires permutations of model values",
             ));
         }
-        model.checks.symmetry.push(entries);
+        generators.push(entries);
     }
+    model.checks.symmetry = symmetry_group(generators);
     Ok(())
+}
+
+/// The group the permutations generate, without the identity, each member
+/// written over the union of their domains.
+fn symmetry_group(generators: Vec<Vec<(Value, Value)>>) -> Vec<Vec<(Value, Value)>> {
+    let mut domain: Vec<Value> = Vec::new();
+    for (key, _) in generators.iter().flatten() {
+        if !domain.contains(key) {
+            domain.push(key.clone());
+        }
+    }
+    // A permutation as the image of each domain element, in domain order.
+    let image = |permutation: &[(Value, Value)]| -> Vec<Value> {
+        domain
+            .iter()
+            .map(|key| {
+                permutation
+                    .iter()
+                    .find(|(k, _)| k == key)
+                    .map_or_else(|| key.clone(), |(_, v)| v.clone())
+            })
+            .collect()
+    };
+    let identity: Vec<Value> = domain.clone();
+    let generators: Vec<Vec<Value>> = generators.iter().map(|p| image(p)).collect();
+    let mut members: Vec<Vec<Value>> = vec![identity.clone()];
+    let mut frontier = vec![identity];
+    while let Some(current) = frontier.pop() {
+        for generator in &generators {
+            // Apply `current`, then `generator`.
+            let composed: Vec<Value> = current
+                .iter()
+                .map(|value| {
+                    // Every image is a key of its generator, which
+                    // `configure_symmetry` checked, so it is in the domain.
+                    let index = domain
+                        .iter()
+                        .position(|d| d == value)
+                        .expect("permutation images lie in the domain");
+                    generator[index].clone()
+                })
+                .collect();
+            if !members.contains(&composed) {
+                members.push(composed.clone());
+                frontier.push(composed);
+            }
+        }
+    }
+    members
+        .into_iter()
+        .filter(|member| *member != domain)
+        .map(|member| domain.iter().cloned().zip(member).collect())
+        .collect()
 }
 
 /// A `PROPERTY` conjunct TLC checks on initial states must be a state
@@ -596,7 +653,7 @@ where
     T: tla_engine::TransitionSystem + Sync,
     T::State: Send + Sync,
     T::Error: Send,
-    T::Key: Send,
+    T::Key: Send + Sync,
 {
     if workers.get() == 1 {
         explore(system, options)

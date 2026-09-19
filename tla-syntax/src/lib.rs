@@ -91,6 +91,9 @@ pub struct Module {
     /// Constants and variables with the number of this module's definitions
     /// that precede their declaration, which is where they come into scope.
     pub declared_at: Vec<(usize, String)>,
+    /// Instances already expanded into this module: the instance name, if
+    /// any, and the module it instantiated. `F <-[M] G` overrides use it.
+    pub instance_origins: Vec<(Option<String>, String)>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

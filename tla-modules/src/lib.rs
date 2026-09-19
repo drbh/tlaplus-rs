@@ -34,6 +34,7 @@ const STANDARD: &[(&str, &str)] = &[
     ("Reals", include_str!("../../library/Reals.tla")),
     ("RealTime", include_str!("../../library/RealTime.tla")),
     ("Sequences", include_str!("../../library/Sequences.tla")),
+    ("TLAPS", include_str!("../../library/TLAPS.tla")),
     ("TLC", include_str!("../../library/TLC.tla")),
     ("TLCExt", include_str!("../../library/TLCExt.tla")),
     ("Toolbox", include_str!("../../library/Toolbox.tla")),
@@ -179,6 +180,7 @@ impl Loader {
                 }
             }
             module.assumptions.extend(parent.assumptions);
+            module.instance_origins.extend(parent.instance_origins);
         }
         for definition in &module.definitions {
             if inherited.iter().any(|d| d.name == definition.name) {
@@ -301,6 +303,9 @@ impl Loader {
                     .map_err(|e| Error(e.to_string()))?,
             );
         }
+        module
+            .instance_origins
+            .push((instance.name.clone(), parent.name.clone()));
         Ok(())
     }
 }

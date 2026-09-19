@@ -3,7 +3,7 @@ use crate::binders::nest;
 use crate::modules::{children, error, field, text};
 use forms::{
     bound_nonfix_op, cartesian_product, case, choose, except, function_literal, lambda, let_in,
-    prefixed_op, record_literal, set_map, unbounded_quantification,
+    prefixed_op, record_literal, set_map, subexpression, unbounded_quantification,
 };
 use tla_syntax::{Diagnostic, Expr};
 use tree_sitter::Node;
@@ -130,6 +130,7 @@ pub(crate) fn expression(node: Node<'_>, source: &str) -> Result<Expr, Diagnosti
             Expr::Call(text(field(node, "name")?, source).into(), args)
         }
         "prefixed_op" => prefixed_op(node, source)?,
+        "subexpression" => subexpression(node, source)?,
         "bound_nonfix_op" => bound_nonfix_op(node, source)?,
         "lambda" => lambda(node, source)?,
         "fairness" => {

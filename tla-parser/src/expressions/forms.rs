@@ -246,3 +246,71 @@ pub(super) fn lambda(node: Node<'_>, source: &str) -> Result<Expr, Diagnostic> {
     let body = expression(*body, source)?;
     Ok(Expr::Call("$Lambda".into(), vec![Expr::Tuple(names), body]))
 }
+
+/// `Op!2`, `Op(x)!1!<<` and `Op!:`: a subexpression of a definition's body,
+/// as `$Subexpr(reference, selector)` nested per step. The selector is the
+/// operand number, or `":"` for the whole body.
+pub(super) fn subexpression(node: Node<'_>, source: &str) -> Result<Expr, Diagnostic> {
+    let mut names: Vec<String> = Vec::new();
+    let mut reference: Option<Expr> = None;
+    let mut work = vec![node];
+    let mut sequence = Vec::new();
+    while let Some(next) = work.pop() {
+        match next.kind() {
+            "subexpression" | "subexpr_prefix" => {
+                let mut kids = children(next);
+                kids.reverse();
+                work.extend(kids);
+            }
+            "subexpr_component" | "subexpr_tree_nav" => sequence.push(next),
+            _ => {}
+        }
+    }
+    for step in sequence {
+        match step.kind() {
+            "subexpr_component" => {
+                let inner = children(step)
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| error(step, "empty subexpression component"))?;
+                match reference.take() {
+                    None if inner.kind() == "identifier_ref" => {
+                        names.push(text(inner, source).to_owned());
+                    }
+                    None => reference = Some(expression(inner, source)?),
+                    Some(Expr::Name(name)) if inner.kind() == "identifier_ref" => {
+                        names.push(name);
+                        names.push(text(inner, source).to_owned());
+                    }
+                    Some(_) => return Err(error(step, "unsupported subexpression path")),
+                }
+            }
+            "subexpr_tree_nav" => {
+                let base = match reference.take() {
+                    Some(base) => base,
+                    None if !names.is_empty() => Expr::Name(names.join("!")),
+                    None => return Err(error(step, "subexpression without an operator")),
+                };
+                names.clear();
+                let selector = match children(step).first().map(|n| n.kind()) {
+                    Some("child_id") => Expr::Integer(
+                        text(children(step)[0], source)
+                            .parse()
+                            .map_err(|_| error(step, "invalid subexpression index"))?,
+                    ),
+                    Some("langle_bracket") => Expr::Integer(1),
+                    Some("rangle_bracket") => Expr::Integer(2),
+                    Some("colon") => Expr::String(":".into()),
+                    _ => return Err(error(step, "unsupported subexpression selector")),
+                };
+                reference = Some(Expr::Call("$Subexpr".into(), vec![base, selector]));
+            }
+            _ => {}
+        }
+    }
+    match reference {
+        Some(expr) => Ok(expr),
+        None if !names.is_empty() => Ok(Expr::Name(names.join("!"))),
+        None => Err(error(node, "empty subexpression")),
+    }
+}

@@ -1,4 +1,4 @@
-use crate::{Binding, Env, Lower};
+use crate::{Binding, Env, Lower, Status};
 use tla_ir::{Builtin as B, Expr as I, ExprId, Level, Operator};
 use tla_modules::Error;
 use tla_syntax::{Definition, Expr};
@@ -15,6 +15,10 @@ impl Lower<'_> {
         match (name, args) {
             ("$Error", [Expr::String(message)]) => return Err(Error(message.clone())),
             ("$Lambda", _) => return Err(Error("LAMBDA is only an operator argument".into())),
+            ("$Subexpr", [reference, selector]) => {
+                let selected = self.subexpression(reference, selector)?;
+                return self.expr(&selected);
+            }
             ("$AngleAct", [action, variables]) => {
                 let action = self.expr(action)?;
                 let variables = self.expr(variables)?;
@@ -43,17 +47,14 @@ impl Lower<'_> {
                 .map_err(|e| Error(e.to_string()));
         }
         let home = self.home(name);
-        let definition = match home {
-            Some(Home::Scope(index)) => Some(self.scoped[index].definitions[name].clone()),
-            Some(Home::Module(index)) => Some(self.module.definitions[index].clone()),
-            None => None,
-        };
+        // A name with no definition may be a built-in operator; a standard
+        // module's definition may be implemented natively.
         let native = match home {
-            None => true,
-            Some(Home::Module(index)) => self.native(index).is_some(),
-            Some(Home::Scope(_)) => false,
+            None => builtin(crate::base(name)),
+            Some(Home::Module(index)) => self.native(index),
+            Some(Home::Scope(_)) => None,
         };
-        if native && let Some(op) = builtin(crate::base(name)) {
+        if let Some(op) = native {
             let args = self.arguments(args, &[])?;
             if matches!(op, B::AssertError | B::TlcCache) {
                 let level = self.level_of(&args);
@@ -64,10 +65,10 @@ impl Lower<'_> {
             }
             return Ok(self.apply(op, args));
         }
-        let (home, definition) = match (home, definition) {
-            (Some(home), Some(definition)) => (home, definition),
-            _ => return Err(Error(format!("unresolved operator {name}"))),
+        let Some(home) = home else {
+            return Err(Error(format!("unresolved operator {name}")));
         };
+        let definition = self.definition_at(home, name);
         if definition.parameters.len() != args.len() {
             return Err(Error(format!("wrong number of arguments for {name}")));
         }
@@ -79,14 +80,24 @@ impl Lower<'_> {
             && self.enabled_scope.is_empty()
         {
             self.definition(index)?;
-            if self.statuses[index] == 2 && is_function(&definition) {
+            // A definition that is itself a function value is referenced as
+            // that value once lowered, rather than called.
+            if self.statuses[index] == Status::Lowered && is_function(&definition) {
                 return Ok(self.program.operators[index].body);
             }
             let args = self.arguments(args, &[])?;
-            let body = (self.statuses[index] == 2).then(|| self.program.operators[index].body);
+            let body = (self.statuses[index] == Status::Lowered)
+                .then(|| self.program.operators[index].body);
             return Ok(self.invoke(index, name, body, args));
         }
         self.expand(name, home, &definition, args)
+    }
+
+    fn definition_at(&self, home: Home, name: &str) -> Definition {
+        match home {
+            Home::Scope(index) => self.scoped[index].definitions[name].clone(),
+            Home::Module(index) => self.module.definitions[index].clone(),
+        }
     }
 
     fn home(&self, name: &str) -> Option<Home> {
@@ -366,4 +377,64 @@ pub(crate) fn builtin(name: &str) -> Option<B> {
         "SelectSeq" => B::SelectSeq,
         _ => return B::from_name(name),
     })
+}
+
+impl Lower<'_> {
+    /// The operand of a definition's body that `Op!n` names: the `n`th
+    /// conjunct or disjunct of a junction list, or the `n`th operand of any
+    /// other operator; `Op!:` is the whole body. Arguments of `Op(a)!n`
+    /// are substituted for the parameters first.
+    fn subexpression(&self, reference: &Expr, selector: &Expr) -> Result<Expr, Error> {
+        let (name, args) = match reference {
+            Expr::Name(name) => (name, &[][..]),
+            Expr::Call(name, args) => (name, args.as_slice()),
+            _ => return Err(Error("subexpression of a non-operator".into())),
+        };
+        let definition = match self.home(name) {
+            Some(home) => self.definition_at(home, name),
+            None => return Err(Error(format!("unresolved operator {name}"))),
+        };
+        if definition.parameters.len() != args.len() {
+            return Err(Error(format!("wrong number of arguments for {name}")));
+        }
+        let replacements = definition
+            .parameters
+            .iter()
+            .cloned()
+            .zip(args.iter().cloned())
+            .collect();
+        let body = tla_syntax::substitute(&definition.body, &replacements)
+            .map_err(|e| Error(e.to_string()))?;
+        let index = match selector {
+            Expr::String(colon) if colon == ":" => return Ok(body),
+            Expr::Integer(n) if *n >= 1 => *n as usize,
+            _ => return Err(Error(format!("invalid subexpression selector for {name}"))),
+        };
+        let operands = match &body {
+            Expr::Binary(op, _, _) if op == "/\\" || op == "\\/" => juncts(&body, op),
+            Expr::Binary(_, left, right) => vec![left.as_ref().clone(), right.as_ref().clone()],
+            Expr::Unary(_, child) => vec![child.as_ref().clone()],
+            Expr::Call(_, args) => args.clone(),
+            Expr::If(a, b, c) => vec![a.as_ref().clone(), b.as_ref().clone(), c.as_ref().clone()],
+            Expr::Bound { body, .. } => vec![body.as_ref().clone()],
+            _ => Vec::new(),
+        };
+        operands
+            .into_iter()
+            .nth(index - 1)
+            .ok_or_else(|| Error(format!("{name} has no subexpression {index}")))
+    }
+}
+
+/// The operands of a junction list `a /\ b /\ c`, which the parser nests
+/// to the left.
+fn juncts(expression: &Expr, op: &str) -> Vec<Expr> {
+    match expression {
+        Expr::Binary(this, left, right) if this == op => {
+            let mut result = juncts(left, op);
+            result.push(right.as_ref().clone());
+            result
+        }
+        other => vec![other.clone()],
+    }
 }

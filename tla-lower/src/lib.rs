@@ -19,6 +19,16 @@ pub struct Lowered {
     pub failures: BTreeMap<String, String>,
 }
 
+/// Where a module definition is in lowering; a definition met again while
+/// `Lowering` is a recursion.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Status {
+    Pending,
+    Lowering,
+    Lowered,
+    Failed,
+}
+
 struct Scope {
     definitions: BTreeMap<String, tla_syntax::Definition>,
     locals: Env,
@@ -50,7 +60,7 @@ impl Env {
 struct Lower<'a> {
     module: &'a Module,
     program: Program,
-    statuses: Vec<u8>,
+    statuses: Vec<Status>,
     symbols: BTreeMap<String, u32>,
     locals: Env,
     next_local: usize,
@@ -98,7 +108,7 @@ fn lower_once(
             constants: module.constants.clone(),
             ..Program::default()
         },
-        statuses: vec![0; module.definitions.len()],
+        statuses: vec![Status::Pending; module.definitions.len()],
         symbols: BTreeMap::new(),
         locals: Env::default(),
         next_local: 0,
@@ -132,11 +142,18 @@ fn lower_once(
         .collect();
     let mut bindings = Vec::new();
     for (name, value) in &config.constants {
-        let slot = module
-            .constants
-            .iter()
-            .position(|n| n == name)
-            .ok_or_else(|| Error(format!("undeclared constant {name}")))?;
+        let Some(slot) = module.constants.iter().position(|n| n == name) else {
+            // Like TLC, a binding may also replace a parameterless definition
+            // by the configured value.
+            let index = module
+                .definitions
+                .iter()
+                .position(|d| d.name == *name && d.parameters.is_empty())
+                .ok_or_else(|| Error(format!("undeclared constant {name}")))?;
+            lower.program.operators[index].body = lower.constant(value)?;
+            lower.statuses[index] = Status::Lowered;
+            continue;
+        };
         let id = lower.constant(value)?;
         bindings.push((slot, id));
     }
@@ -164,12 +181,10 @@ fn lower_once(
             lower.active.truncate(active);
             lower.locals = Env::default();
             for failed in 0..lower.statuses.len() {
-                if lower.statuses[failed] == 1 {
-                    lower.statuses[failed] = 3;
+                if lower.statuses[failed] == Status::Lowering {
+                    lower.statuses[failed] = Status::Failed;
                     lower.failures.insert(failed, error.0.clone());
-                    lower.program.operators[failed].body = lower
-                        .program
-                        .push(I::Literal(Literal::Bool(false)), Level::Constant);
+                    lower.program.operators[failed].body = lower.placeholder_body();
                 }
             }
         }
@@ -236,12 +251,19 @@ impl Lower<'_> {
             _ => self.expr(expression),
         }
     }
+    /// The body of an operator that is never invoked: one expanded at each
+    /// call, or one whose lowering failed and whose error is reported
+    /// instead.
+    fn placeholder_body(&mut self) -> ExprId {
+        self.program
+            .push(I::Literal(Literal::Bool(false)), Level::Constant)
+    }
     fn definition(&mut self, index: usize) -> Result<(), Error> {
         match self.statuses[index] {
-            2 => return Ok(()),
-            3 => return Err(Error(self.failures[&index].clone())),
-            1 if self.module.definitions[index].recursive => return Ok(()),
-            1 => {
+            Status::Lowered => return Ok(()),
+            Status::Failed => return Err(Error(self.failures[&index].clone())),
+            Status::Lowering if self.module.definitions[index].recursive => return Ok(()),
+            Status::Lowering => {
                 return Err(Error(format!(
                     "operator {} is used recursively without a RECURSIVE declaration",
                     self.module.definitions[index].name
@@ -249,12 +271,12 @@ impl Lower<'_> {
             }
             _ => {}
         }
-        self.statuses[index] = 1;
+        self.statuses[index] = Status::Lowering;
         let definition = self.module.definitions[index].clone();
         if self.native(index).is_none() && definition.arities.iter().any(|arity| *arity > 0) {
             // Operators with operator parameters are expanded at each call.
-            self.program.operators[index].body = self.literal(Literal::Bool(false));
-            self.statuses[index] = 2;
+            self.program.operators[index].body = self.placeholder_body();
+            self.statuses[index] = Status::Lowered;
             return Ok(());
         }
         let saved = std::mem::take(&mut self.locals);
@@ -293,7 +315,7 @@ impl Lower<'_> {
             parameters,
             body,
         };
-        self.statuses[index] = 2;
+        self.statuses[index] = Status::Lowered;
         Ok(())
     }
     fn fresh(&mut self) -> usize {

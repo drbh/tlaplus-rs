@@ -12,6 +12,8 @@ pub struct Config {
     pub action_constraints: Vec<String>,
     pub constants: Vec<(String, Expr)>,
     pub overrides: Vec<(String, String)>,
+    /// `F <-[M] G`: `F` is replaced by `G` only inside instances of module `M`.
+    pub scoped_overrides: Vec<(String, String, String)>,
     pub view: Option<String>,
     pub symmetry: Option<String>,
     /// Only changes how states are displayed, which is outside the answer contract.
@@ -80,8 +82,11 @@ pub fn config(source: &str) -> Result<Config, Error> {
                 while index < values.len() {
                     let name = values[index].text.clone();
                     index += 1;
-                    if result.constants.iter().any(|(n, _)| *n == name)
-                        || result.overrides.iter().any(|(n, _)| *n == name)
+                    let scoped = values.get(index).is_some_and(|v| v.text == "<")
+                        && values.get(index + 2).is_some_and(|v| v.text == "[");
+                    if !scoped
+                        && (result.constants.iter().any(|(n, _)| *n == name)
+                            || result.overrides.iter().any(|(n, _)| *n == name))
                     {
                         return Err(Error(format!("duplicate constant binding {name}")));
                     }
@@ -89,13 +94,31 @@ pub fn config(source: &str) -> Result<Config, Error> {
                         && values.get(index + 1).is_some_and(|v| v.text == "-")
                     {
                         index += 2;
+                        let mut scope = None;
+                        if values.get(index).is_some_and(|v| v.text == "[") {
+                            let module = values
+                                .get(index + 1)
+                                .ok_or_else(|| Error("missing override module".into()))?
+                                .text
+                                .clone();
+                            if values.get(index + 2).is_none_or(|v| v.text != "]") {
+                                return Err(Error("override module requires [Module]".into()));
+                            }
+                            index += 3;
+                            scope = Some(module);
+                        }
                         let replacement = values
                             .get(index)
                             .ok_or_else(|| Error("missing override".into()))?
                             .text
                             .clone();
                         index += 1;
-                        result.overrides.push((name, replacement));
+                        match scope {
+                            Some(module) => {
+                                result.scoped_overrides.push((module, name, replacement))
+                            }
+                            None => result.overrides.push((name, replacement)),
+                        }
                         continue;
                     }
                     if values.get(index).is_none_or(|v| v.text != "=") {
@@ -148,6 +171,7 @@ pub fn config(source: &str) -> Result<Config, Error> {
 
 /// Applies configuration overrides of operators (`F <- G`, for operator constants
 /// and definitions alike): the operator's body becomes an application of `G`.
+/// A scoped `F <-[M] G` applies to `F` as instantiated from module `M`.
 pub fn override_operators(module: &mut Module, config: &mut Config) -> Result<(), Error> {
     let mut remaining = Vec::new();
     for (name, replacement) in std::mem::take(&mut config.overrides) {
@@ -155,21 +179,45 @@ pub fn override_operators(module: &mut Module, config: &mut Config) -> Result<()
             remaining.push((name, replacement));
             continue;
         }
-        let definition = module
-            .definitions
-            .iter_mut()
-            .find(|d| d.name == name)
-            .ok_or_else(|| Error(format!("cannot override undefined {name}")))?;
-        let args = definition
-            .parameters
-            .iter()
-            .cloned()
-            .map(Expr::Name)
-            .collect();
-        definition.body = Expr::Call(replacement, args);
-        definition.standard = false;
+        override_definition(module, &name, replacement.clone())?;
     }
     config.overrides = remaining;
+    for (scope, name, replacement) in std::mem::take(&mut config.scoped_overrides) {
+        let instances: Vec<_> = module
+            .instance_origins
+            .iter()
+            .filter(|(_, origin)| *origin == scope)
+            .map(|(prefix, _)| match prefix {
+                Some(prefix) => format!("{prefix}!{name}"),
+                None => name.clone(),
+            })
+            .collect();
+        if instances.is_empty() {
+            return Err(Error(format!(
+                "no instance of module {scope} to override {name} in"
+            )));
+        }
+        for instantiated in instances {
+            override_definition(module, &instantiated, replacement.clone())?;
+        }
+    }
+    Ok(())
+}
+
+fn override_definition(module: &mut Module, name: &str, replacement: String) -> Result<(), Error> {
+    let definition = module
+        .definitions
+        .iter_mut()
+        .find(|d| d.name == name)
+        .ok_or_else(|| Error(format!("cannot override undefined {name}")))?;
+    let args = definition
+        .parameters
+        .iter()
+        .cloned()
+        .map(Expr::Name)
+        .collect();
+    definition.body = Expr::Call(replacement, args);
+    definition.standard = false;
     Ok(())
 }
 
