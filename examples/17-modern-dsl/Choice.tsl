@@ -1,0 +1,14 @@
+// Every number in the inclusive range is explored; this is not random sampling.
+// Expected: BelowThree fails when select chooses 3.
+spec Choice {
+    const Limit: Int = 3;
+    type Candidate = Int where n { n >= 0 && n <= Limit }
+    domain Candidate in 0..=Limit;
+    state value: Candidate = 0;
+    action select {
+        pick candidate in Candidate;
+        next value = candidate;
+    }
+    invariant BelowThree { value < 3 }
+    next { select }
+}

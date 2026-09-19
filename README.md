@@ -33,6 +33,24 @@ the config is the sibling `.cfg`, or a `CONFIG` section at the end of the spec, 
 
 ## learn
 
+An [experimental modern DSL](examples/17-modern-dsl/README.md) adds typed state,
+atomic actions, nondeterministic choice, and temporal properties:
+
+```bash
+tla examples/17-modern-dsl/AtomicCounter.tsl
+tla --export examples/17-modern-dsl/Retry.tsl /tmp/tsl-retry-export
+```
+
+It compiles to ordinary TLA+ and uses the same checker. The examples include
+expected counterexamples and a weak-versus-strong fairness comparison.
+
+Every original example now has a `.tsl` counterpart beside it, including the
+Point library. The [comparison index](examples/README.md#modern-syntax-comparisons)
+links all 18 pairs and explains representation differences.
+
+[VS Code syntax highlighting](editors/vscode/README.md) is available as a local
+extension for `.tsl` files.
+
 [examples](examples) is a numbered path from a four state counter to liveness, fairness and modules. each spec says what it teaches and what to expect:
 
 ```bash
@@ -44,6 +62,7 @@ tla examples/01-counter/Counter.tla
 |                                                        |                                                    |
 | ------------------------------------------------------ | -------------------------------------------------- |
 | `tla-cli`                                              | the `tla` binary: arguments and output             |
+| `tla-dsl`                                              | experimental typed action DSL and TLA+ export       |
 | `tla-checker`                                          | the checker as a library: load, bind, run, outcome |
 | `tla-syntax`, `tla-parser`, `tla-modules`, `tla-lower` | front end: parsing, module loading, lowering to IR |
 | `tla-ir`, `tla-values`, `tla-value-expr`               | expression representation and values               |

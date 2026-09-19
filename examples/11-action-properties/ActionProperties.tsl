@@ -1,0 +1,44 @@
+// Port of ActionProperties.tla with the same 2 threads and atomic steps.
+// Program-counter strings become enum variants; the NULL lock value becomes 0.
+// Maps retain thread indices 1..NumThreads. Omitted state is preserved.
+// Expect: Safety checks passed.
+spec ActionProperties {
+    const NumThreads: Int = 2;
+    const Threads: Set<Int> = 1..=NumThreads;
+    enum Phase { GetLock, GetCounter, IncCounter, ReleaseLock, Done }
+    state counter: Int = 0;
+    state tmp: Map<Int, Int> = map(t in Threads) { 0 };
+    state pc: Map<Int, Phase> = map(t in Threads) { GetLock };
+    state lock: Int = 0;
+    view all_done() -> Bool { forall(t in Threads) { pc[t] == Done } }
+
+    action get_lock(t in Threads) {
+        require pc[t] == GetLock && lock == 0;
+        next lock = t;
+        next pc = put(pc, t, GetCounter);
+    }
+    action get_counter(t in Threads) {
+        require pc[t] == GetCounter;
+        next tmp = put(tmp, t, counter);
+        next pc = put(pc, t, IncCounter);
+    }
+    action inc_counter(t in Threads) {
+        require pc[t] == IncCounter;
+        next counter = tmp[t] + 1;
+        next pc = put(pc, t, ReleaseLock);
+    }
+    action release_lock(t in Threads) {
+        require pc[t] == ReleaseLock && lock == t;
+        next lock = 0;
+        next pc = put(pc, t, Done);
+    }
+    action terminating { require all_done(); }
+    // A transition property checks a pair of states, allowing stuttering
+    // of precisely the variables in its frame, as in [][A]_v.
+    transition Monotonic over (counter) { after(counter) >= counter }
+    transition NoStealing over (lock) { lock != 0 => after(lock) == 0 }
+    transition Forward over (pc) {
+        forall(t in Threads) { after(pc)[t] == pc[t] || pc[t] != Done }
+    }
+    next { get_lock, get_counter, inc_counter, release_lock, terminating }
+}

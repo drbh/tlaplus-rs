@@ -1,0 +1,35 @@
+// Port of Duplicates.tla, preserving the original input domains and atomic steps.
+// Expect: Safety checks passed.
+spec Duplicates {
+    const S: Set<Int> = 1..=4;
+    enum Phase { Iterate, Done }
+    fn unique(values: Seq<Int>) -> Bool {
+        forall(i in 1..=len(values)) {
+            forall(j in 1..=len(values)) { i != j => values[i] != values[j] }
+        }
+    }
+    // Membership initialization explores every input without an extra setup step.
+    state seq: Seq<Int> in sequences(S, 3);
+    state index: Int = 1;
+    state seen: Set<Int> = {};
+    state is_unique: Bool = true;
+    state pc: Phase = Iterate;
+    view finished() -> Bool { pc == Done }
+
+    action iterate {
+        require pc == Iterate && index <= len(seq);
+        next is_unique = if contains(seen, seq[index]) { false } else { is_unique };
+        next seen = union(seen, {seq[index]});
+        next index = index + 1;
+    }
+    action finish {
+        require pc == Iterate && index > len(seq);
+        next pc = Done;
+    }
+    action done { require finished(); }
+    invariant TypeInvariant {
+        subset(seen, S) && index >= 1 && index <= len(seq) + 1
+    }
+    invariant IsCorrect { finished() => is_unique == unique(seq) }
+    next { iterate, finish, done }
+}

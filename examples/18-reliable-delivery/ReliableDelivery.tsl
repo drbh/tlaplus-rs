@@ -1,0 +1,80 @@
+// Two clients submit one request each. Requests and acknowledgments can be lost.
+// Retrying and duplicate delivery must never apply a request twice.
+spec ReliableDelivery {
+    enum Peer { Alice, Bob }
+    enum MessageKind { Request, Ack }
+    struct Message { peer: Peer, kind: MessageKind }
+
+    type Count = Int where n { n >= 0 && n <= 1 }
+    fn applied_once(n: Count) -> Count { 1 }
+
+    state pending: Set<Message>;
+    state applied: Map<Peer, Count>;
+    state completed: Map<Peer, Bool>;
+
+    init {
+        next pending = {};
+        next applied = map(p in Peer) { 0 };
+        next completed = map(p in Peer) { false };
+    }
+
+    view acknowledged(p: Peer) -> Bool { completed[p] }
+    view abstract_delivered() -> Set<Peer> {
+        filter(p in Peer) { applied[p] == 1 }
+    }
+
+    // Atomic helper: excluded from Next, usable inside receive and duplicate.
+    action apply_once(p in Peer) {
+        next applied = put(applied, p, applied_once(applied[p]));
+    }
+    action retry(p in Peer) {
+        require !acknowledged(p);
+        next pending = union(pending, { Message { peer: p, kind: Request } });
+    }
+    action receive(p in Peer) {
+        require contains(pending, Message { peer: p, kind: Request });
+        call apply_once(p);
+        next pending = union(
+            difference(pending, { Message { peer: p, kind: Request } }),
+            { Message { peer: p, kind: Ack } }
+        );
+    }
+    action duplicate(p in Peer) {
+        require contains(pending, Message { peer: p, kind: Request });
+        call apply_once(p);
+        // Keep the request available for another delivery.
+        next pending = union(pending, { Message { peer: p, kind: Ack } });
+    }
+    action acknowledge(p in Peer) {
+        require contains(pending, Message { peer: p, kind: Ack });
+        next completed = put(completed, p, true);
+        next pending = difference(pending, { Message { peer: p, kind: Ack } });
+    }
+    action lose {
+        pick message in pending;
+        next pending = difference(pending, { message });
+    }
+    action idle {}
+
+    next { retry, receive, duplicate, acknowledge, lose, idle }
+
+    // Strong fairness states the delivery assumption: perpetual retries cannot
+    // be lost forever. Fairness is per client, not shared between Alice and Bob.
+    fair strong retry;
+    fair strong receive;
+    fair strong acknowledge;
+
+    invariant AcksAreSound {
+        forall(p in Peer) { acknowledged(p) => contains(abstract_delivered(), p) }
+    }
+    invariant MessagesAreSound {
+        forall(m in pending) { m.kind == Ack => applied[m.peer] == 1 }
+    }
+    // Abstract machine: a set of delivered peers grows by at most one per step.
+    // Internal network steps may stutter at the abstract level.
+    transition RefinesDelivery over (applied) {
+        subset(abstract_delivered(), after(abstract_delivered()))
+        && size(difference(after(abstract_delivered()), abstract_delivered())) <= 1
+    }
+    property AllComplete { forall(p in Peer) { eventually(acknowledged(p)) } }
+}

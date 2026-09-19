@@ -1,0 +1,41 @@
+// Two workers read and write in separate atomic actions.
+// Expected: BothIncrementsCounted is violated by a lost update.
+spec Race {
+    enum Phase { Ready, Read, Done }
+    state counter: Int = 0;
+    state a: Phase = Ready;
+    state b: Phase = Ready;
+    state snapshotA: Int = 0;
+    state snapshotB: Int = 0;
+
+    view both_done() -> Bool { a == Done && b == Done }
+
+    action readA {
+        require a == Ready;
+        next snapshotA = counter;
+        next a = Read;
+    }
+    action readB {
+        require b == Ready;
+        next snapshotB = counter;
+        next b = Read;
+    }
+    action writeA {
+        require a == Read;
+        next counter = snapshotA + 1;
+        next a = Done;
+    }
+    action writeB {
+        require b == Read;
+        next counter = snapshotB + 1;
+        next b = Done;
+    }
+    // Explicit successful termination; other dead ends remain detectable.
+    action finished {
+        require both_done();
+    }
+    invariant BothIncrementsCounted {
+        both_done() => counter == 2
+    }
+    next { readA, readB, writeA, writeB, finished }
+}

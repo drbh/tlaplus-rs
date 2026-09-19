@@ -1,0 +1,39 @@
+// Measure exactly four gallons using unmarked three- and five-gallon jugs.
+// Fill from a tap, empty to a drain, or pour until a jug is empty or full.
+// Expect: NotSolved is violated; the shortest solution takes six moves.
+spec DieHard {
+    enum Jug { Small, Large }
+    fn capacity(jug: Jug) -> Int { if jug == Small { 3 } else { 5 } }
+
+    // Every jug has a volume, and no volume exceeds its jug's capacity.
+    type Volumes = Map<Jug, Int> where amounts {
+        forall(j in Jug) { amounts[j] >= 0 && amounts[j] <= capacity(j) }
+    }
+    state water: Volumes = map(j in Jug) { 0 };
+
+    view solved() -> Bool { water[Large] == 4 }
+    view poured(from: Jug, to: Jug) -> Int {
+        if water[from] < capacity(to) - water[to] {
+            water[from]
+        } else { capacity(to) - water[to] }
+    }
+
+    action fill(j in Jug) {
+        require water[j] < capacity(j);
+        next water = put(water, j, capacity(j));
+    }
+    action empty(j in Jug) {
+        require water[j] > 0;
+        next water = put(water, j, 0);
+    }
+    action pour(from in Jug, to in Jug) {
+        require from != to && water[from] > 0 && water[to] < capacity(to);
+        // Both amounts use the old state: pouring is one atomic move.
+        next water = put(put(water, from, water[from] - poured(from, to)),
+            to, water[to] + poured(from, to));
+    }
+    next { fill, empty, pour }
+
+    // The counterexample to this claim is the puzzle's solution.
+    invariant NotSolved { !solved() }
+}

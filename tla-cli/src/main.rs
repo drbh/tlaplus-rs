@@ -1,5 +1,6 @@
 //! The `tla` command: parses arguments, drives `tla-checker`, and renders
 //! outcomes and counterexamples the way TLC reports them.
+mod dsl;
 mod trace;
 use std::{fmt, num::NonZeroUsize, path::PathBuf};
 use tla_checker::{Bound, BoundModel, Completion, Disk, Liveness, Outcome, Settings};
@@ -7,6 +8,10 @@ use tla_checker::{Bound, BoundModel, Completion, Disk, Liveness, Outcome, Settin
 /// Why the command could not finish.
 #[derive(Debug)]
 enum Error {
+    Dsl {
+        path: PathBuf,
+        error: tla_dsl::Error,
+    },
     Usage(String),
     Io {
         path: PathBuf,
@@ -21,6 +26,7 @@ enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Dsl { path, error } => write!(f, "{}:{error}", path.display()),
             Self::Usage(message) | Self::Trace(message) => f.write_str(message),
             Self::Io { path, error } => write!(f, "{}: {error}", path.display()),
             Self::Check(e) => e.fmt(f),
@@ -151,8 +157,15 @@ fn run(args: Vec<String>) -> Result<i32, Error> {
 fn run_model(args: Vec<String>, timeline: Option<&tla_observe::Timeline>) -> Result<i32, Error> {
     if args.iter().any(|arg| arg == "--help" || arg == "-h") {
         println!(
-            "Usage: tla [--config FILE] [--workers N] [--no-deadlock] [--continue] [--seed N] [--unicode] [--max-states N] [--library DIR] [--disk FILE --disk-cache-bytes N] SPEC.tla\nChecks finite models with INIT/NEXT or SPECIFICATION configuration. Unsupported language and CLI features produce errors."
+            "Usage: tla [--config FILE] [--workers N] [--no-deadlock] [--continue] [--seed N] [--unicode] [--max-states N] [--library DIR] [--disk FILE --disk-cache-bytes N] SPEC.tla|SPEC.tsl\n       tla --export SPEC.tsl DIRECTORY\n       tla --check SPEC.tsl\nChecks finite models with INIT/NEXT or SPECIFICATION configuration. The experimental DSL compiles to TLA+ before checking. Export writes new .tla/.cfg files. Unsupported language and CLI features produce errors."
         );
+        return Ok(0);
+    }
+    if args.first().is_some_and(|arg| arg == "--export") {
+        if args.len() != 3 {
+            return Err(usage("usage: tla --export SPEC.tsl DIRECTORY"));
+        }
+        dsl::export(&PathBuf::from(&args[1]), &PathBuf::from(&args[2]))?;
         return Ok(0);
     }
     if args.first().is_some_and(|a| a == "--check-syntax") {
@@ -168,12 +181,27 @@ fn run_model(args: Vec<String>, timeline: Option<&tla_observe::Timeline>) -> Res
         if args.len() != 2 {
             return Err(usage("usage: tla --check FILE"));
         }
-        tla_checker::check_module(&PathBuf::from(&args[1]))?;
+        let path = PathBuf::from(&args[1]);
+        if path.extension().is_some_and(|ext| ext == "tsl") {
+            dsl::compile(&path)?;
+        } else {
+            tla_checker::check_module(&path)?;
+        }
         return Ok(0);
     }
     let args = Arguments::parse(args)?;
+    let generated = if args.spec.extension().is_some_and(|ext| ext == "tsl") {
+        if args.config.is_some() {
+            return Err(usage(
+                "DSL models define their own configuration; export to TLA+ to use --config",
+            ));
+        }
+        Some(dsl::generate(&args.spec)?)
+    } else {
+        None
+    };
     let loaded = tla_checker::load(
-        &args.spec,
+        generated.as_ref().map_or(&args.spec, |model| &model.path),
         args.config.as_deref(),
         &args.libraries,
         timeline,
@@ -201,6 +229,9 @@ fn run_model(args: Vec<String>, timeline: Option<&tla_observe::Timeline>) -> Res
         path,
         cache_bytes: args.disk_cache_bytes,
     });
+    if let Some(generated) = &generated {
+        generated.annotate(&mut checker.model, &args.spec);
+    }
     let outcome = checker.run(disk.as_ref(), timeline)?;
     report(&checker.model, outcome, trace::Style::new(args.unicode))
 }
@@ -263,5 +294,7 @@ fn statistics(initial: usize, distinct: usize, depth: usize) {
     println!("{distinct} distinct states found ({initial} initial), search depth {depth}");
 }
 
+#[cfg(test)]
+mod dsl_tests;
 #[cfg(test)]
 mod tests;

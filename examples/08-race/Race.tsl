@@ -1,0 +1,32 @@
+// Port of Race.tla with the same 2 threads and atomic steps.
+// Program-counter strings become enum variants; the NULL lock value becomes 0.
+// Maps retain thread indices 1..NumThreads. Omitted state is preserved.
+// Expect: Invariant Correct is violated.
+spec Race {
+    const NumThreads: Int = 2;
+    const Threads: Set<Int> = 1..=NumThreads;
+    enum Phase { GetCounter, IncCounter, Done }
+    state counter: Int = 0;
+    state tmp: Map<Int, Int> = map(t in Threads) { 0 };
+    state pc: Map<Int, Phase> = map(t in Threads) { GetCounter };
+    view all_done() -> Bool { forall(t in Threads) { pc[t] == Done } }
+
+    action get_counter(t in Threads) {
+        require pc[t] == GetCounter;
+        next tmp = put(tmp, t, counter);
+        next pc = put(pc, t, IncCounter);
+    }
+    action inc_counter(t in Threads) {
+        require pc[t] == IncCounter;
+        next counter = tmp[t] + 1;
+        next pc = put(pc, t, Done);
+    }
+    action terminating { require all_done(); }
+    invariant Bounds {
+        counter >= 0 && counter <= NumThreads
+        && domain(tmp) == Threads && domain(pc) == Threads
+        && forall(t in Threads) { tmp[t] >= 0 && tmp[t] <= NumThreads }
+    }
+    invariant Correct { all_done() => counter == NumThreads }
+    next { get_counter, inc_counter, terminating }
+}

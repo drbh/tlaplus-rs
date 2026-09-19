@@ -28,6 +28,7 @@ schema_version = 1
 
 [workspace.metadata.architecture.crates]
 tla-cli = "interfaces/cli"
+tla-dsl = "frontend/native"
 tla-oracle-cli = "interfaces/cli"
 tla-checker = "application/checker"
 tla-syntax = "frontend/native"
@@ -54,7 +55,7 @@ tla-stack-tests = "validation/conformance"
 tla-value-conformance = "validation/conformance"
 
 [workspace.metadata.architecture.allowed.normal]
-"interfaces/cli" = ["application/checker", "infrastructure/observability", "semantics/values", "validation/conformance"]
+"interfaces/cli" = ["application/checker", "frontend/native", "infrastructure/observability", "semantics/values", "validation/conformance"]
 "application/checker" = ["frontend/native", "infrastructure/observability", "infrastructure/storage", "runtime/exploration", "runtime/model", "semantics/ir", "semantics/values", "verification/temporal"]
 "frontend/native" = ["semantics/ir"]
 "frontend/faithful" = ["runtime/exploration", "runtime/model", "semantics/ir", "semantics/values", "validation/conformance"]

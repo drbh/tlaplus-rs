@@ -1,0 +1,26 @@
+// Port of Bank.tla: same accounts, transfer sizes, and initial balances.
+// Accounts are enum values; a typed record groups the last transfer.
+// Expect: Safety checks passed.
+spec Bank {
+    enum Account { Alice, Bob, Carol }
+    struct Transfer { from: Account, to: Account, amount: Int }
+    const Accounts: Set<Account> = {Alice, Bob, Carol};
+    const Limit: Int = 3;
+    const Total: Int = 3 * Limit;
+    state balance: Map<Account, Int> = map(a in Accounts) { Limit };
+    state last: Transfer = Transfer { from: Alice, to: Alice, amount: 0 };
+    view total_balance() -> Int { balance[Alice] + balance[Bob] + balance[Carol] }
+    action transfer(from in Accounts, to in Accounts, amount in 1..=Limit) {
+        require from != to;
+        require balance[from] >= amount;
+        next balance = put(put(balance, from, balance[from] - amount), to, balance[to] + amount);
+        next last = Transfer { from: from, to: to, amount: amount };
+    }
+    invariant AccountBounds {
+        domain(balance) == Accounts && last.amount >= 0 && last.amount <= Limit
+        && forall(a in Accounts) { balance[a] >= 0 && balance[a] <= Total }
+    }
+    invariant NoOverdraft { forall(a in Accounts) { balance[a] >= 0 } }
+    invariant Conserved { total_balance() == Total }
+    next { transfer }
+}

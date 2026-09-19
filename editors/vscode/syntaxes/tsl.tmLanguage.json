@@ -1,0 +1,311 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "TSL",
+  "scopeName": "source.tsl",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#enum"
+    },
+    {
+      "include": "#declarations"
+    },
+    {
+      "include": "#expressions"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "name": "comment.line.double-slash.tsl",
+      "begin": "//",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.comment.tsl"
+        }
+      },
+      "end": "$"
+    },
+    "enum": {
+      "name": "meta.enum.tsl",
+      "begin": "\\b(enum)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+      "beginCaptures": {
+        "1": {
+          "name": "storage.type.enum.tsl"
+        },
+        "2": {
+          "name": "entity.name.type.enum.tsl"
+        }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.block.end.tsl"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "match": "\\{",
+          "name": "punctuation.section.block.begin.tsl"
+        },
+        {
+          "match": ",",
+          "name": "punctuation.separator.tsl"
+        },
+        {
+          "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b",
+          "name": "constant.other.enum.tsl"
+        }
+      ]
+    },
+    "declarations": {
+      "patterns": [
+        {
+          "match": "\\b(struct|domain)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "storage.type.tsl"
+            },
+            "2": {
+              "name": "entity.name.type.tsl"
+            }
+          }
+        },
+        {
+          "match": "\\b(type)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "storage.type.tsl"
+            },
+            "2": {
+              "name": "entity.name.type.tsl"
+            }
+          }
+        },
+        {
+          "match": "\\b(import)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.control.import.tsl"
+            },
+            "2": {
+              "name": "entity.name.namespace.tsl"
+            }
+          }
+        },
+        {
+          "match": "\\b(spec|module)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "storage.type.tsl"
+            },
+            "2": {
+              "name": "entity.name.type.namespace.tsl"
+            }
+          }
+        },
+        {
+          "match": "\\b(action|invariant|property|transition|fn|view)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "storage.type.tsl"
+            },
+            "2": {
+              "name": "entity.name.function.tsl"
+            }
+          }
+        },
+        {
+          "match": "\\b(const)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "storage.modifier.tsl"
+            },
+            "2": {
+              "name": "variable.other.constant.tsl"
+            }
+          }
+        },
+        {
+          "match": "\\b(state|pick)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "storage.type.tsl"
+            },
+            "2": {
+              "name": "variable.other.readwrite.tsl"
+            }
+          }
+        },
+        {
+          "match": "\\b(fair)\\s+(weak|strong)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.control.tsl"
+            },
+            "2": {
+              "name": "storage.modifier.tsl"
+            },
+            "3": {
+              "name": "entity.name.function.tsl"
+            }
+          }
+        },
+        {
+          "match": "(:)\\s*([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "punctuation.separator.type.tsl"
+            },
+            "2": {
+              "name": "entity.name.type.tsl"
+            }
+          }
+        }
+      ]
+    },
+    "expressions": {
+      "patterns": [
+        {
+          "match": "(\\.)([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "punctuation.accessor.tsl"
+            },
+            "2": {
+              "name": "variable.other.property.tsl"
+            }
+          }
+        },
+        {
+          "match": "\\b(is)\\b",
+          "name": "keyword.operator.comparison.tsl"
+        },
+        {
+          "match": "\\b(len|head|tail|append|concat|slice|size|contains|union|intersect|difference|subset|powerset|domain|put|sequences|sequences_up_to|functions|product|product3|entry|merge)\\b",
+          "name": "support.function.collection.tsl"
+        },
+        {
+          "match": "->",
+          "name": "keyword.operator.return-type.tsl"
+        },
+        {
+          "match": "\\b(spec|module|enum|struct|type|const|state|action|invariant|property|transition|pick|fn|view)\\b",
+          "name": "storage.type.tsl"
+        },
+        {
+          "match": "\\b(require|next|init|call|in|where|fair|if|else|assume|import|over|forall|exists|map|sequence|set_of|filter|choose|lambda)\\b",
+          "name": "keyword.control.tsl"
+        },
+        {
+          "match": "\\b(weak|strong|recursive)\\b",
+          "name": "storage.modifier.tsl"
+        },
+        {
+          "match": "\\b(always|eventually|after)\\b",
+          "name": "support.function.temporal.tsl"
+        },
+        {
+          "match": "\\b(Int|Bool|String|Set|Seq|Map|Fn)\\b",
+          "name": "support.type.tsl"
+        },
+        {
+          "match": "\\b(true|false)\\b",
+          "name": "constant.language.boolean.tsl"
+        },
+        {
+          "match": "\\b[0-9]+\\b",
+          "name": "constant.numeric.integer.tsl"
+        },
+        {
+          "match": "\\.\\.=",
+          "name": "keyword.operator.range.tsl"
+        },
+        {
+          "match": "==|!=|<=|>=|<|>",
+          "name": "keyword.operator.comparison.tsl"
+        },
+        {
+          "match": "=>|&&|\\|\\||!",
+          "name": "keyword.operator.logical.tsl"
+        },
+        {
+          "match": "=",
+          "name": "keyword.operator.assignment.tsl"
+        },
+        {
+          "match": "[+*%\\-]",
+          "name": "keyword.operator.arithmetic.tsl"
+        },
+        {
+          "match": "\\{",
+          "name": "punctuation.section.block.begin.tsl"
+        },
+        {
+          "match": "\\}",
+          "name": "punctuation.section.block.end.tsl"
+        },
+        {
+          "match": "\\(",
+          "name": "punctuation.section.group.begin.tsl"
+        },
+        {
+          "match": "\\)",
+          "name": "punctuation.section.group.end.tsl"
+        },
+        {
+          "match": "[;,:]",
+          "name": "punctuation.separator.tsl"
+        },
+        {
+          "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b(?=\\s*\\()",
+          "name": "entity.name.function.tsl"
+        },
+        {
+          "match": "\\b[A-Z][A-Za-z0-9_]*\\b",
+          "name": "variable.other.constant.tsl"
+        },
+        {
+          "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b",
+          "name": "variable.other.readwrite.tsl"
+        },
+        {
+          "match": "\\[",
+          "name": "punctuation.section.brackets.begin.tsl"
+        },
+        {
+          "match": "\\]",
+          "name": "punctuation.section.brackets.end.tsl"
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.tsl",
+      "begin": "\"",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.begin.tsl"
+        }
+      },
+      "end": "\"|$",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.end.tsl"
+        }
+      },
+      "patterns": [
+        {
+          "match": "\\\\[\"\\\\ntr]",
+          "name": "constant.character.escape.tsl"
+        }
+      ]
+    }
+  }
+}

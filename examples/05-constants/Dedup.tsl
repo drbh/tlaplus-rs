@@ -1,0 +1,41 @@
+// Port of Dedup.tla, preserving the original input domains and atomic steps.
+// Expect: Safety checks passed.
+// Enum variants replace opaque model values. All 120 inputs are explored;
+// symmetry reduction is not enabled, so raw state counts differ from the original.
+spec Dedup {
+    enum Item { s1, s2, s3 }
+    const S: Set<Item> = {s1, s2, s3};
+    const Size: Int = 4;
+    assume size(S) >= 1;
+    assume Size >= 1 && Size <= 10;
+    enum Phase { Iterate, Done }
+    fn unique(values: Seq<Item>) -> Bool {
+        forall(i in 1..=len(values)) {
+            forall(j in 1..=len(values)) { i != j => values[i] != values[j] }
+        }
+    }
+    // Membership initialization explores every input without an extra setup step.
+    state seq: Seq<Item> in sequences_up_to(S, Size);
+    state index: Int = 1;
+    state seen: Set<Item> = {};
+    state is_unique: Bool = true;
+    state pc: Phase = Iterate;
+    view finished() -> Bool { pc == Done }
+
+    action iterate {
+        require pc == Iterate && index <= len(seq);
+        next is_unique = if contains(seen, seq[index]) { false } else { is_unique };
+        next seen = union(seen, {seq[index]});
+        next index = index + 1;
+    }
+    action finish {
+        require pc == Iterate && index > len(seq);
+        next pc = Done;
+    }
+    action done { require finished(); }
+    invariant TypeInvariant {
+        subset(seen, S) && index >= 1 && index <= len(seq) + 1
+    }
+    invariant IsCorrect { finished() => is_unique == unique(seq) }
+    next { iterate, finish, done }
+}

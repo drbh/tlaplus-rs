@@ -1,0 +1,45 @@
+// Port of Advanced.tla: recursive and higher-order functions and constant facts.
+// Set choice is deterministic mathematical choose, not a nondeterministic pick.
+// Nested if replaces CASE; insert replaces the custom infix operator.
+// factorial is a recursive operator rather than a recursive function value.
+// Expect: Safety checks passed.
+spec Advanced {
+    recursive fn sum_seq(values: Seq<Int>) -> Int {
+        if values == [] { 0 } else { head(values) + sum_seq(tail(values)) }
+    }
+    recursive fn set_sum(values: Set<Int>) -> Int {
+        if values == {} { 0 } else {
+            choose(x in values) { true } + set_sum(difference(values, {choose(x in values) { true }}))
+        }
+    }
+    recursive fn set_to_seq(values: Set<Int>) -> Seq<Int> {
+        if values == {} { [] } else {
+            concat([choose(x in values) { forall(y in values) { x <= y } }],
+                set_to_seq(difference(values, {choose(x in values) { forall(y in values) { x <= y } }})))
+        }
+    }
+    fn seq_map(op: Fn<Int, Int>, values: Seq<Int>) -> Seq<Int> {
+        sequence(i in 1..=len(values)) { op(values[i]) }
+    }
+    fn double(n: Int) -> Int { n * 2 }
+    fn insert(values: Set<Int>, x: Int) -> Set<Int> { union(values, {x}) }
+    fn sign(n: Int) -> Int { if n > 0 { 1 } else { if n < 0 { -1 } else { 0 } } }
+    type Natural = Int where n { n >= 0 }
+    recursive fn factorial(n: Natural) -> Natural { if n == 0 { 1 } else { n * factorial(n - 1) } }
+    assume sum_seq([1, 2, 3]) == 6;
+    assume set_sum({1, 2, 3, 4}) == 10;
+    assume set_to_seq({3, 1, 2}) == [1, 2, 3];
+    assume seq_map(double, [1, 2]) == [2, 4];
+    assume seq_map(lambda(n: Int) { n + 1 }, [1, 2]) == [2, 3];
+    assume insert({1}, 2) == {1, 2};
+    assume sign(5) == 1 && sign(-5) == -1 && sign(0) == 0;
+    assume factorial(5) == 120;
+    // Map entry and merge correspond to :> and @@. Compare by domain and entries
+    // because the modern type system distinguishes maps from sequences.
+    assume domain(merge(entry(1, "a"), entry(2, "b"))) == {1, 2};
+    assume merge(entry(1, "a"), entry(2, "b"))[1] == "a";
+    assume merge(entry(1, "a"), entry(2, "b"))[2] == "b";
+    state unused: Int = 0;
+    action stay {}
+    next { stay }
+}

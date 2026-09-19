@@ -1,0 +1,48 @@
+// The same puzzle as DieHard.tsl, with a distinct type for each jug.
+// Nominal structs prevent mixing up jugs; refinements check their capacities.
+// Expect: NotSolved is violated after six moves.
+spec DieHardTyped {
+    struct SmallJug { gallons: Int }
+    struct LargeJug { gallons: Int }
+    type ValidSmallJug = SmallJug where jug { jug.gallons >= 0 && jug.gallons <= 3 }
+    type ValidLargeJug = LargeJug where jug { jug.gallons >= 0 && jug.gallons <= 5 }
+
+    state small: ValidSmallJug = SmallJug { gallons: 0 };
+    state large: ValidLargeJug = LargeJug { gallons: 0 };
+
+    fn minimum(a: Int, b: Int) -> Int { if a < b { a } else { b } }
+    view to_small() -> Int { minimum(large.gallons, 3 - small.gallons) }
+    view to_large() -> Int { minimum(small.gallons, 5 - large.gallons) }
+    view solved() -> Bool { large.gallons == 4 }
+
+    action fill_small {
+        require small.gallons < 3;
+        next small = SmallJug { gallons: 3 };
+    }
+    action fill_large {
+        require large.gallons < 5;
+        next large = LargeJug { gallons: 5 };
+    }
+    action empty_small {
+        require small.gallons > 0;
+        next small = SmallJug { gallons: 0 };
+    }
+    action empty_large {
+        require large.gallons > 0;
+        next large = LargeJug { gallons: 0 };
+    }
+    // Both writes use the old state and happen in one atomic move.
+    action pour_into_small {
+        require large.gallons > 0 && small.gallons < 3;
+        next small = SmallJug { gallons: small.gallons + to_small() };
+        next large = LargeJug { gallons: large.gallons - to_small() };
+    }
+    action pour_into_large {
+        require small.gallons > 0 && large.gallons < 5;
+        next small = SmallJug { gallons: small.gallons - to_large() };
+        next large = LargeJug { gallons: large.gallons + to_large() };
+    }
+    next { fill_small, fill_large, empty_small, empty_large, pour_into_small, pour_into_large }
+
+    invariant NotSolved { !solved() }
+}

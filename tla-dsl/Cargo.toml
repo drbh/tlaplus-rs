@@ -1,0 +1,6 @@
+[package]
+name = "tla-dsl"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+description = "Experimental typed action language that exports TLA+ models."

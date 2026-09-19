@@ -1,0 +1,44 @@
+// Port of Fairness.tla with the same 3 threads and atomic steps.
+// Program-counter strings become enum variants; the NULL lock value becomes 0.
+// Maps retain thread indices 1..NumThreads. Omitted state is preserved.
+// Expect: Safety checks passed.
+spec Fairness {
+    const NumThreads: Int = 3;
+    const Threads: Set<Int> = 1..=NumThreads;
+    enum Phase { GetLock, GetCounter, IncCounter, ReleaseLock, Done }
+    state counter: Int = 0;
+    state tmp: Map<Int, Int> = map(t in Threads) { 0 };
+    state pc: Map<Int, Phase> = map(t in Threads) { GetLock };
+    state lock: Int = 0;
+    view all_done() -> Bool { forall(t in Threads) { pc[t] == Done } }
+
+    action get_lock(t in Threads) {
+        require pc[t] == GetLock && lock == 0;
+        next lock = t;
+        next pc = put(pc, t, GetCounter);
+    }
+    action get_counter(t in Threads) {
+        require pc[t] == GetCounter;
+        next tmp = put(tmp, t, counter);
+        next pc = put(pc, t, IncCounter);
+    }
+    action inc_counter(t in Threads) {
+        require pc[t] == IncCounter;
+        next counter = tmp[t] + 1;
+        next pc = put(pc, t, ReleaseLock);
+    }
+    action release_lock(t in Threads) {
+        require pc[t] == ReleaseLock && lock == t;
+        next lock = 0;
+        next pc = put(pc, t, Done);
+    }
+    action terminating { require all_done(); }
+    property Finishes { eventually(always(counter == NumThreads)) }
+    // One weak fairness assumption per thread for its entire step relation,
+    // matching forall t: WF_vars(Thread(t)) in the original.
+    fair weak { get_lock, get_counter, inc_counter, release_lock };
+    property EveryThreadFinishes {
+        forall(t in Threads) { always(pc[t] == GetLock => eventually(pc[t] == Done)) }
+    }
+    next { get_lock, get_counter, inc_counter, release_lock, terminating }
+}

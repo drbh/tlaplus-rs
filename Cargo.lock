@@ -511,7 +511,9 @@ dependencies = [
 name = "tla-cli"
 version = "0.1.0"
 dependencies = [
+ "tempfile",
  "tla-checker",
+ "tla-dsl",
  "tla-observe",
  "tla-value-expr",
 ]
@@ -542,6 +544,10 @@ dependencies = [
  "tla-engine",
  "tla-values",
 ]
+
+[[package]]
+name = "tla-dsl"
+version = "0.1.0"
 
 [[package]]
 name = "tla-engine"

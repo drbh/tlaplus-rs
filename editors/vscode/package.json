@@ -1,0 +1,48 @@
+{
+  "name": "tsl-language",
+  "displayName": "TSL \u2014 Modern TLA+",
+  "description": "Syntax highlighting and basic editing support for the tlaplus-rs specification DSL (.tsl).",
+  "version": "0.4.0",
+  "publisher": "tlaplus-rs",
+  "private": true,
+  "license": "UNLICENSED",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "TSL",
+    "TLA+",
+    "formal methods",
+    "model checking"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/drbh/tlaplus-rs.git",
+    "directory": "editors/vscode"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "tlaplus-tsl",
+        "aliases": [
+          "TSL",
+          "tsl"
+        ],
+        "extensions": [
+          ".tsl"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "tlaplus-tsl",
+        "scopeName": "source.tsl",
+        "path": "./syntaxes/tsl.tmLanguage.json"
+      }
+    ]
+  }
+}

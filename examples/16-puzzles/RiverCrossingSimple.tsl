@@ -1,0 +1,38 @@
+// Port of RiverCrossingSimple.tla, retaining one variable per character.
+// Bool encodes the banks: false = near, true = far; !bank crosses the river.
+// Safety is checked on the proposed state inside the same atomic crossing.
+// Expect: NotSolved is violated, showing a solution in seven crossings.
+spec RiverCrossingSimple {
+    fn safe(f: Bool, w: Bool, g: Bool, c: Bool) -> Bool {
+        !(w == g && g != f) && !(g == c && g != f)
+    }
+    state farmer: Bool = false;
+    state wolf: Bool = false;
+    state goat: Bool = false;
+    state cabbage: Bool = false;
+    view solved() -> Bool { farmer && wolf && goat && cabbage }
+    action farmer_alone {
+        require safe(!farmer, wolf, goat, cabbage);
+        next farmer = !farmer;
+    }
+    action take_wolf {
+        require wolf == farmer;
+        require safe(!farmer, !wolf, goat, cabbage);
+        next farmer = !farmer;
+        next wolf = !wolf;
+    }
+    action take_goat {
+        require goat == farmer;
+        require safe(!farmer, wolf, !goat, cabbage);
+        next farmer = !farmer;
+        next goat = !goat;
+    }
+    action take_cabbage {
+        require cabbage == farmer;
+        require safe(!farmer, wolf, goat, !cabbage);
+        next farmer = !farmer;
+        next cabbage = !cabbage;
+    }
+    invariant NotSolved { !solved() }
+    next { farmer_alone, take_wolf, take_goat, take_cabbage }
+}

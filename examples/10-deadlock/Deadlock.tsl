@@ -1,0 +1,33 @@
+// Port of Deadlock.tla with two threads acquiring locks in opposite orders.
+// Typed locks and parameterized actions retain the original map representation.
+// Expect: deadlock when each thread holds its first lock and awaits the other.
+spec Deadlock {
+    enum Lock { A, B }
+    const Threads: Set<Int> = 1..=2;
+    const Order: Map<Int, Seq<Lock>> = map(t in Threads) {
+        if t == 1 { [A, B] } else { [B, A] }
+    };
+    state holder: Map<Lock, Int> = map(l in Lock) { 0 };
+    state held: Map<Int, Int> = map(t in Threads) { 0 };
+
+    // Called only after checking that this thread still needs another lock.
+    view next_lock(thread: Int) -> Lock { Order[thread][held[thread] + 1] }
+
+    action acquire(t in Threads) {
+        require held[t] < 2;
+        require holder[next_lock(t)] == 0;
+        next holder = put(holder, next_lock(t), t);
+        next held = put(held, t, held[t] + 1);
+    }
+    action release(t in Threads) {
+        require held[t] == 2;
+        next holder = map(l in Lock) { if holder[l] == t { 0 } else { holder[l] } };
+        next held = put(held, t, 0);
+    }
+    invariant ValidState {
+        domain(holder) == Lock && domain(held) == Threads
+        && forall(l in Lock) { holder[l] >= 0 && holder[l] <= 2 }
+        && forall(t in Threads) { held[t] >= 0 && held[t] <= 2 }
+    }
+    next { acquire, release }
+}

@@ -1,0 +1,21 @@
+// Expected: safety passes. Each increment is a single atomic action.
+spec AtomicCounter {
+    state counter: Int = 0;
+    state doneA: Bool = false;
+    state doneB: Bool = false;
+    // This helper is part of each caller, never a standalone step.
+    action increment { next counter = counter + 1; }
+    action incrementA {
+        require !doneA;
+        call increment();
+        next doneA = true;
+    }
+    action incrementB {
+        require !doneB;
+        call increment();
+        next doneB = true;
+    }
+    action finished { require doneA && doneB; }
+    invariant BothIncrementsCounted { (doneA && doneB) => counter == 2 }
+    next { incrementA, incrementB, finished }
+}

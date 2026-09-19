@@ -1,0 +1,29 @@
+// A request may be lost and retried indefinitely.
+// Weak fairness permits repeated loss: delivery is only intermittently enabled.
+// Expected: DeliveredEventually fails.
+spec UnfairRetry {
+    state pending: Bool = false;
+    state delivered: Bool = false;
+    // Inline composition keeps loss/delivery atomic with clearing the request.
+    action clear_pending {
+        require pending;
+        next pending = false;
+    }
+    action send {
+        require !pending && !delivered;
+        next pending = true;
+    }
+    action lose {
+        call clear_pending();
+    }
+    action deliver {
+        call clear_pending();
+        next delivered = true;
+    }
+    action finished { require delivered; }
+    fair weak send;
+    fair weak deliver;
+    invariant NoDuplicateRequest { delivered => !pending }
+    property DeliveredEventually { eventually(delivered) }
+    next { send, lose, deliver, finished }
+}

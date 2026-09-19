@@ -1,0 +1,41 @@
+// Typed port of RiverCrossing.tla. NotSolved reveals a seven-crossing solution.
+spec RiverCrossing {
+    enum Character { Farmer, Wolf, Goat, Cabbage }
+    enum Bank { Left, Right }
+
+    // A boat always carries the farmer and at most one passenger.
+    type Crossing = Set<Character> where crew {
+        contains(crew, Farmer) && size(crew) <= 2
+    }
+
+    // A total assignment gives every character exactly one bank.
+    // Without the farmer, neither predator may share a bank with its food.
+    type SafeRiver = Map<Character, Bank> where banks {
+        // Farmer must be with the goat
+        banks[Farmer] == banks[Goat]
+        // Or Wolf and Goat cannot be on the same bank
+        || (banks[Wolf] != banks[Goat]
+        // And the goat and cabbage cannot be on the same bank
+        && banks[Goat] != banks[Cabbage])
+    }
+
+    // A candidate may be unsafe; the action checks it before committing.
+    fn crossed(banks: SafeRiver, crew: Crossing) -> Map<Character, Bank> {
+        map(c in Character) {
+            if contains(crew, c) {
+                if banks[c] == Left { Right } else { Left }
+            } else { banks[c] }
+        }
+    }
+
+    state side: SafeRiver = map(c in Character) { Left };
+
+    action cross(crew in Crossing) {
+        require forall(c in crew) { side[c] == side[Farmer] };
+        require crossed(side, crew) is SafeRiver;
+        next side = crossed(side, crew);
+    }
+
+    invariant NotSolved { !forall(c in Character) { side[c] == Right } }
+    next { cross }
+}

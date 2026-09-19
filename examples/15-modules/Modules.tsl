@@ -1,0 +1,21 @@
+// Port of Modules.tla. Local module imports share a checked namespace.
+// Typed point constants replace the Origin and Unit module instances.
+// The exported TLA+ is self-contained, including the imported definitions.
+// Expect: Safety checks passed; 4 reachable points along the diagonal.
+spec Modules {
+    import Point;
+    assume append([1], 2) == [1, 2];
+    const Origin: Coordinates = point_repr(0, 0);
+    const Unit: Coordinates = point_repr(1, 1);
+    assume Origin == Coordinates { x: 0, y: 0 };
+    assume point_add(Origin, point_repr(1, 2)) == point_repr(1, 2);
+    assume point_add(Unit, point_repr(1, 2)) == point_repr(2, 3);
+    state point: Coordinates = Origin;
+    action step {
+        require point.x < 3;
+        next point = point_add(point, Unit);
+    }
+    action stay { require point.x == 3; }
+    invariant OnDiagonal { point.x == point.y && point.x >= 0 && point.x <= 3 }
+    next { step, stay }
+}

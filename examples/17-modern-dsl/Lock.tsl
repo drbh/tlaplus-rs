@@ -1,0 +1,30 @@
+// Expected: safety passes. Acquiring the lock is atomic.
+spec Lock {
+    enum Owner { Free, WorkerA, WorkerB }
+    state owner: Owner = Free;
+    state insideA: Bool = false;
+    state insideB: Bool = false;
+    view available() -> Bool { owner == Free }
+    action acquireA {
+        require available();
+        next owner = WorkerA;
+        next insideA = true;
+    }
+    action acquireB {
+        require available();
+        next owner = WorkerB;
+        next insideB = true;
+    }
+    action releaseA {
+        require owner == WorkerA;
+        next owner = Free;
+        next insideA = false;
+    }
+    action releaseB {
+        require owner == WorkerB;
+        next owner = Free;
+        next insideB = false;
+    }
+    invariant MutualExclusion { !(insideA && insideB) }
+    next { acquireA, acquireB, releaseA, releaseB }
+}

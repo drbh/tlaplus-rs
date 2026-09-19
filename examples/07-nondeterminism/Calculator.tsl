@@ -1,0 +1,47 @@
+// Modern-syntax port of Calculator.tla in this directory.
+// Same constants, state variables, operations, and target property.
+//
+// pick replaces the existential digit choice. The three branches of Input
+// become named atomic actions; every enabled action and digit is explored.
+// Each action updates sum and inputs simultaneously, as in the original.
+//
+// Run:    tla examples/07-nondeterminism/Calculator.tsl
+// Expect: Invariant NotTarget is violated after 5 inputs, ending at sum = 417.
+// Try Target = 851: no combination of five inputs reaches it.
+spec Calculator {
+    const NumInputs: Int = 5;
+    const Target: Int = 417;
+
+    state sum: Int = 0;
+    state inputs: Int = 0;
+
+    // Calls compose into the caller's single atomic step.
+    action count_input {
+        require inputs < NumInputs;
+        next inputs = inputs + 1;
+    }
+
+    action add {
+        pick digit in 0..=9;
+        call count_input();
+        next sum = sum + digit;
+    }
+
+    action subtract {
+        pick digit in 0..=9;
+        call count_input();
+        next sum = sum - digit;
+    }
+
+    action multiply {
+        pick digit in 0..=9;
+        call count_input();
+        next sum = sum * digit;
+    }
+
+    // The original Done action: omitted writes preserve both state variables.
+    action done { require inputs == NumInputs; }
+
+    invariant NotTarget { sum != Target }
+    next { add, subtract, multiply, done }
+}

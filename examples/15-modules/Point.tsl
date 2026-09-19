@@ -1,0 +1,9 @@
+// Library counterpart of Point.tla; use --check, or import it into Modules.tsl.
+// Typed point values replace the parameters of INSTANCE ... WITH.
+module Point {
+    struct Coordinates { x: Int, y: Int }
+    fn point_repr(x: Int, y: Int) -> Coordinates { Coordinates { x: x, y: y } }
+    fn point_add(base: Coordinates, offset: Coordinates) -> Coordinates {
+        Coordinates { x: base.x + offset.x, y: base.y + offset.y }
+    }
+}

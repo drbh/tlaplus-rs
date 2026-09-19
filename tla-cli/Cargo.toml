@@ -9,6 +9,8 @@ name = "tla"
 path = "src/main.rs"
 
 [dependencies]
+tla-dsl = { path = "../tla-dsl" }
+tempfile = "3"
 tla-checker = { path = "../tla-checker" }
 tla-observe = { path = "../tla-observe" }
 tla-value-expr = { path = "../tla-value-expr" }
