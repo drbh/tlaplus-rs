@@ -24,7 +24,9 @@ npm run test:browser
 ```
 
 The build script downloads WASI SDK 34 for the C parser dependencies, or uses
-`WASI_SDK_PATH` when set. Cloudflare serves `dist/`, including the 8.4 MB checker.
+`WASI_SDK_PATH` when set. It stages the checker dependency closure separately
+from development-only oracle adapters that depend on a sibling checkout, while
+retaining the root lockfile’s package versions. Cloudflare serves `dist/`, including the 8.4 MB checker.
 Each check runs in a fresh worker with an in-memory filesystem; Stop and the
 15-second deadline terminate that worker. The 2,000-state and 16 MB result
 limits apply in both modes. Initial checker download/compilation is included in

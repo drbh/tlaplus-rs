@@ -29,8 +29,12 @@ jobs:
           cache: npm
           cache-dependency-path: playground/package-lock.json
       - run: npm --prefix playground ci
+      - name: Prepare the standalone checker workspace
+        run: python3 playground/tools/prepare-workspace.py
       - name: Test the native checker
-        run: cargo test --locked -p tla-playground -p tla-checker
+        run: cargo test --manifest-path playground/.cache/browser-workspace/Cargo.toml --locked -p tla-playground -p tla-checker
+        env:
+          CARGO_TARGET_DIR: ${{ github.workspace }}/target
       - name: Build the browser checker and site
         run: npm --prefix playground run build:browser
       - name: Install Chromium
