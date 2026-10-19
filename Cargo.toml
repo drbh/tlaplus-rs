@@ -28,6 +28,7 @@ schema_version = 1
 
 [workspace.metadata.architecture.crates]
 tla-cli = "interfaces/cli"
+tla-playground = "interfaces/cli"
 tla-dsl = "frontend/native"
 tla-oracle-cli = "interfaces/cli"
 tla-checker = "application/checker"

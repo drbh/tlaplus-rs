@@ -152,3 +152,19 @@ disabled; tests also check that overflowing either jug violates its refinement.
 ```sh
 ./target/debug/tla examples/16-puzzles/DieHardTyped.tsl
 ```
+
+## Logic, planning, and scheduling puzzles
+
+[19-puzzle-gallery](19-puzzle-gallery/README.md) adds nine interactive examples:
+knights and knaves, feature selection, a mini Einstein puzzle, cryptarithmetic,
+4×4 Sudoku, bridge and torch, a warehouse robot, a staff rota, and factory
+scheduling. Each includes a deliberate no-solution claim whose counterexample
+reveals an answer. The gallery documents uniqueness and optimization experiments,
+and all defaults run within the playground's 500-state budget.
+
+## Paxos consensus
+
+[20-paxos](20-paxos/README.md) pairs a bounded single-decree Paxos model with
+an intentionally broken proposer. The correct model verifies agreement over
+1,696 states; the broken model exposes conflicting choices in ten transitions.
+The playground visualizes promises, proposals, and historical acceptances.

@@ -1,0 +1,29 @@
+// Three jobs each have two operations on a drill or paint machine.
+// Operations 1->4, 2->5, 3->6 belong to the same job and must occur in that order.
+// Find integer start times finishing by Deadline. Intervals are [start, finish).
+// NoSolution reveals a schedule. Deadline = 4 proves infeasibility.
+spec MiniFactory {
+    enum Machine { Drill, Paint }
+    const Deadline: Int = 5;
+    const Machines: Seq<Machine> = [Drill, Paint, Drill, Paint, Drill, Paint];
+    const Durations: Seq<Int> = [2, 1, 1, 1, 2, 2];
+    state starts: Seq<Int> = [];
+    view solved() -> Bool { len(starts) == 6 }
+    action schedule {
+        pick start in 0..=Deadline;
+        require len(starts) < 6;
+        require start + Durations[len(starts) + 1] <= Deadline;
+        require if len(starts) < 3 { true } else {
+            start >= starts[len(starts) - 2] + Durations[len(starts) - 2]
+        };
+        require forall(previous in 1..=len(starts)) {
+            Machines[previous] == Machines[len(starts) + 1] =>
+            (start >= starts[previous] + Durations[previous]
+             || start + Durations[len(starts) + 1] <= starts[previous])
+        };
+        next starts = append(starts, start);
+    }
+    action inspect {}
+    next { schedule, inspect }
+    invariant NoSolution { !solved() }
+}

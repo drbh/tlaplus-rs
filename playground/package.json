@@ -1,0 +1,32 @@
+{
+  "name": "tla-playground",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "checker": "cargo build --manifest-path ../Cargo.toml -p tla-playground",
+    "dev": "npm run checker && vite --host 127.0.0.1",
+    "build": "svelte-check && vite build",
+    "check": "svelte-check",
+    "preview": "npm run checker && vite preview --host 127.0.0.1",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "@codemirror/commands": "6.8.0",
+    "@codemirror/language": "6.11.0",
+    "@codemirror/lint": "6.8.4",
+    "@codemirror/state": "6.5.2",
+    "@codemirror/view": "6.36.2",
+    "@lezer/highlight": "1.2.5",
+    "codemirror": "6.0.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.0",
+    "@sveltejs/vite-plugin-svelte": "7.3.1",
+    "@tsconfig/svelte": "5.0.8",
+    "@types/node": "25.9.8",
+    "svelte": "5.57.1",
+    "svelte-check": "4.7.6",
+    "typescript": "5.9.3",
+    "vite": "8.3.1"
+  }
+}

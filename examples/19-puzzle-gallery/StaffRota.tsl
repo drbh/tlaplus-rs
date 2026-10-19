@@ -1,0 +1,24 @@
+// Three staff cover morning/evening shifts for three days (slots 1..6).
+// Everyone works twice, at most once per day, and never evening then next morning.
+// Bob cannot work slot 1, Alice slot 4, Cara slot 6. Find a valid rota.
+spec StaffRota {
+    enum Staff { Alice, Bob, Cara }
+    fn available(person: Staff, slot: Int) -> Bool {
+        !(person == Bob && slot == 1) && !(person == Alice && slot == 4)
+        && !(person == Cara && slot == 6)
+    }
+    state shifts: Seq<Staff> = [];
+    view solved() -> Bool { len(shifts) == 6 }
+    action assign {
+        pick person in Staff;
+        require len(shifts) < 6;
+        require available(person, len(shifts) + 1);
+        // Adjacent slots cover both same-day and evening-to-next-morning cases.
+        require if len(shifts) == 0 { true } else { shifts[len(shifts)] != person };
+        require size(filter(i in 1..=len(shifts)) { shifts[i] == person }) < 2;
+        next shifts = append(shifts, person);
+    }
+    action inspect {}
+    next { assign, inspect }
+    invariant NoSolution { !solved() }
+}

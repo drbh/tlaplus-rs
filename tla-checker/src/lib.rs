@@ -488,6 +488,8 @@ pub enum Liveness {
 /// witnesses and postconditions are only checked after complete exploration,
 /// and each stops at its first failure.
 pub struct Outcome {
+    /// Retained only by run_with_graph; edges are observed transitions, not a tree.
+    pub graph: Option<ExplorationGraph>,
     pub statistics: Statistics,
     pub violations: Vec<Violation<State>>,
     pub liveness: Vec<(String, Liveness)>,
@@ -497,17 +499,39 @@ pub struct Outcome {
     pub completion: Completion<State>,
 }
 
+/// The explored prefix, including which states were fully expanded.
+pub struct ExplorationGraph {
+    pub nodes: Vec<tla_engine::Node<State>>,
+    pub edges: Vec<tla_engine::Edge>,
+}
+
 impl Checker {
+    /// Checks in memory while retaining the observed state graph for inspection.
+    pub fn run_with_graph(&mut self) -> Result<Outcome, Error> {
+        self.run_internal(None, None, true)
+    }
+
     /// Explores the model, in memory or on `disk`, and runs the configured checks.
     pub fn run(
         &mut self,
         disk: Option<&Disk>,
         timeline: Option<&Timeline>,
     ) -> Result<Outcome, Error> {
+        self.run_internal(disk, timeline, false)
+    }
+
+    fn run_internal(
+        &mut self,
+        disk: Option<&Disk>,
+        timeline: Option<&Timeline>,
+        retain_graph: bool,
+    ) -> Result<Outcome, Error> {
         let options = Options {
             check_deadlock: self.model.checks.check_deadlock,
             max_states: self.settings.max_states,
-            record_graph: !self.live.properties.is_empty() || !self.possible.is_empty(),
+            record_graph: retain_graph
+                || !self.live.properties.is_empty()
+                || !self.possible.is_empty(),
             continue_after_violation: self.settings.continue_after_violation,
         };
         if let Some(disk) = disk {
@@ -576,6 +600,10 @@ impl Checker {
             }
         }
         Ok(Outcome {
+            graph: retain_graph.then_some(ExplorationGraph {
+                nodes: report.nodes,
+                edges: report.edges,
+            }),
             statistics,
             violations: report.violations,
             liveness,
@@ -622,6 +650,7 @@ impl Checker {
             self.validate(violation)?;
         }
         Ok(Outcome {
+            graph: None,
             statistics: Statistics {
                 initial: report.statistics.initial_distinct,
                 distinct: report.distinct as usize,

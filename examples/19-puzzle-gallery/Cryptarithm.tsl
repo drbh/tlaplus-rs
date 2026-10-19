@@ -1,0 +1,22 @@
+// I + BB = ILL. Different letters mean different digits; no leading zeroes.
+// NoSolution reveals the unique answer: 1 + 99 = 100.
+spec Cryptarithm {
+    type Digit = Int where n { n >= 0 && n <= 9 }
+    state digitI: Digit;
+    state digitB: Digit;
+    state digitL: Digit;
+    init {
+        pick i in 1..=9;
+        pick b in 1..=9;
+        pick l in 0..=9;
+        require i != b;
+        require l != i && l != b;
+        require i + 11 * b == 100 * i + 11 * l;
+        next digitI = i;
+        next digitB = b;
+        next digitL = l;
+    }
+    action inspect {}
+    next { inspect }
+    invariant NoSolution { digitI + 11 * digitB != 100 * digitI + 11 * digitL }
+}

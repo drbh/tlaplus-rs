@@ -1,0 +1,37 @@
+// Fill a 4x4 Sudoku with digits 1..4; rows, columns, and 2x2 boxes are distinct.
+// Cells are numbered row-major, 1..16. Zero means an unfilled cell.
+// NoSolution reveals a completed board. Fixed cell order avoids permutation noise.
+spec MiniSudoku {
+    const Cells: Set<Int> = 1..=16;
+    const Clues: Seq<Int> = [1, 2, 0, 4, 0, 4, 1, 0, 0, 1, 4, 0, 4, 0, 0, 1];
+    type Entry = Int where n { n >= 0 && n <= 4 }
+    fn row(c: Int) -> Int { if c <= 4 { 1 } else { if c <= 8 { 2 } else { if c <= 12 { 3 } else { 4 } } } }
+    fn column(c: Int) -> Int { (c - 1) % 4 + 1 }
+    fn same_box(a: Int, b: Int) -> Bool {
+        (row(a) <= 2) == (row(b) <= 2) && (column(a) <= 2) == (column(b) <= 2)
+    }
+    fn shares_unit(a: Int, b: Int) -> Bool { row(a) == row(b) || column(a) == column(b) || same_box(a, b) }
+    state board: Map<Int, Entry> = map(c in Cells) { Clues[c] };
+    view solved() -> Bool { forall(c in Cells) { board[c] != 0 } }
+    action place {
+        pick c in Cells;
+        pick digit in 1..=4;
+        require board[c] == 0;
+        require forall(earlier in Cells) { earlier < c => board[earlier] != 0 };
+        require forall(other in Cells) {
+            shares_unit(c, other)
+            => board[other] != digit
+        };
+        next board = put(board, c, digit);
+    }
+    // A rejected partial assignment is a search dead end, not a system deadlock.
+    action inspect {}
+    next { place, inspect }
+    invariant CluesPreserved { forall(c in Cells) { Clues[c] != 0 => board[c] == Clues[c] } }
+    invariant NoConflicts {
+        forall(a in Cells) { forall(b in Cells) {
+            (a != b && board[a] != 0 && board[b] != 0 && shares_unit(a, b)) => board[a] != board[b]
+        } }
+    }
+    invariant NoSolution { !solved() }
+}

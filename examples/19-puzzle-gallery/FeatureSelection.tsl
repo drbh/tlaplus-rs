@@ -1,0 +1,27 @@
+// Choose at least three features within a five-credit budget.
+// Offline conflicts with sync; analytics needs sync; sync and backup need encryption.
+// NoSolution reveals one valid package. Remove it to explore all valid packages.
+spec FeatureSelection {
+    enum Feature { Offline, CloudSync, Encryption, Analytics, Backup }
+    const Budget: Int = 5;
+    fn price(features: Set<Feature>) -> Int {
+        (if contains(features, Offline) { 2 } else { 0 })
+        + (if contains(features, CloudSync) { 2 } else { 0 })
+        + (if contains(features, Encryption) { 1 } else { 0 })
+        + (if contains(features, Analytics) { 2 } else { 0 })
+        + (if contains(features, Backup) { 1 } else { 0 })
+    }
+    state enabled: Set<Feature>;
+    init {
+        pick features in powerset(Feature);
+        require size(features) >= 3 && price(features) <= Budget;
+        require !(contains(features, Offline) && contains(features, CloudSync));
+        require contains(features, Analytics) => contains(features, CloudSync);
+        require contains(features, CloudSync) => contains(features, Encryption);
+        require contains(features, Backup) => contains(features, Encryption);
+        next enabled = features;
+    }
+    action inspect {}
+    next { inspect }
+    invariant NoSolution { size(enabled) < 3 }
+}

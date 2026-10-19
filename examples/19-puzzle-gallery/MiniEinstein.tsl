@@ -1,0 +1,29 @@
+// Three houses numbered left to right, three jobs, and three pets.
+// The baker lives in the middle. The doctor is left of the baker.
+// The cat lives next to the doctor. The teacher owns the fish.
+// NoSolution reveals who owns each pet; the clues have one solution.
+spec MiniEinstein {
+    enum Job { Doctor, Baker, Teacher }
+    enum Pet { Cat, Dog, Fish }
+    const Houses: Set<Int> = 1..=3;
+    state job: Map<Int, Job>;
+    state pet: Map<Int, Pet>;
+    init {
+        pick jobs in functions(Houses, Job);
+        pick pets in functions(Houses, Pet);
+        require forall(a in Houses) { forall(b in Houses) { a != b => jobs[a] != jobs[b] } };
+        require jobs[2] == Baker && jobs[1] == Doctor;
+        require forall(a in Houses) { forall(b in Houses) { a != b => pets[a] != pets[b] } };
+        require forall(h in Houses) { jobs[h] == Teacher => pets[h] == Fish };
+        require exists(h in Houses) {
+            pets[h] == Cat && exists(d in Houses) {
+                jobs[d] == Doctor && (h == d + 1 || d == h + 1)
+            }
+        };
+        next job = jobs;
+        next pet = pets;
+    }
+    action inspect {}
+    next { inspect }
+    invariant NoSolution { domain(job) != Houses }
+}

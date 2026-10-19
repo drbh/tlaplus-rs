@@ -1,0 +1,5 @@
+// Browser entry point; the native checker runs in isolated local processes.
+import { mount } from 'svelte';
+import App from './App.svelte';
+import './app.css';
+mount(App,{target:document.getElementById('app')!});

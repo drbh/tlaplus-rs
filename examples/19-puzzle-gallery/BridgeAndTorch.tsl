@@ -1,0 +1,30 @@
+// Four people take 1, 2, 5, and 10 minutes to cross with one torch.
+// One or two people cross together, taking the slower person's time.
+// NotSolved reveals a 17-minute solution. Budget = 16 proves no such route exists.
+spec BridgeAndTorch {
+    enum Person { One, Two, Five, Ten }
+    enum Bank { Near, Far }
+    const Budget: Int = 17;
+    fn time(p: Person) -> Int { if p == One { 1 } else { if p == Two { 2 } else { if p == Five { 5 } else { 10 } } } }
+    fn opposite(bank: Bank) -> Bank { if bank == Near { Far } else { Near } }
+    type Crew = Set<Person> where people { size(people) >= 1 && size(people) <= 2 }
+    fn duration(people: Crew) -> Int {
+        time(choose(p in people) { forall(q in people) { time(p) >= time(q) } })
+    }
+    type Minutes = Int where n { n >= 0 && n <= Budget }
+    state side: Map<Person, Bank> = map(p in Person) { Near };
+    state torch: Bank = Near;
+    state elapsed: Minutes = 0;
+    view solved() -> Bool { forall(p in Person) { side[p] == Far } }
+    action cross(people in Crew) {
+        require forall(p in people) { side[p] == torch };
+        require elapsed + duration(people) <= Budget;
+        next side = map(p in Person) { if contains(people, p) { opposite(side[p]) } else { side[p] } };
+        next torch = opposite(torch);
+        next elapsed = elapsed + duration(people);
+    }
+    // Exhausted budgets may stop; this makes bounded impossibility a safety check.
+    action inspect {}
+    next { cross, inspect }
+    invariant NotSolved { !solved() }
+}

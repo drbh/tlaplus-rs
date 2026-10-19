@@ -652,6 +652,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "tla-playground"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tla-checker",
+ "tla-dsl",
+ "tla-parser",
+ "tla-value-expr",
+]
+
+[[package]]
 name = "tla-props"
 version = "0.1.0"
 dependencies = [

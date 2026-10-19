@@ -1,0 +1,17 @@
+// A: "B is a knave." B: "A and C are the same kind." C: "A is a knight."
+// Knights tell the truth; knaves lie. Find each person's kind.
+// NoSolution intentionally fails, revealing the unique consistent assignment.
+spec KnightsAndKnaves {
+    enum Person { A, B, C }
+    state knight: Map<Person, Bool>;
+    init {
+        pick answer in functions(Person, {true, false});
+        require answer[A] == !answer[B];
+        require answer[B] == (answer[A] == answer[C]);
+        require answer[C] == answer[A];
+        next knight = answer;
+    }
+    action inspect {}
+    next { inspect }
+    invariant NoSolution { domain(knight) != Person }
+}

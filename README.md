@@ -85,3 +85,10 @@ cargo fmt --all --check
 cargo test --workspace
 cargo clippy --workspace --all-targets --no-deps -- -D warnings
 ```
+
+## Web playground
+
+The local [playground](playground/README.md) supports editing TSL and TLA+,
+source-linked counterexample traces, changed-state inspection, and explored-state
+graphs. Its [design document](playground/docs/design.md) covers the output model
+and a path toward browser-only execution.

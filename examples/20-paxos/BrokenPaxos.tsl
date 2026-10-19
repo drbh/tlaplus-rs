@@ -1,0 +1,86 @@
+// Deliberately broken Paxos: a proposer ignores previously accepted values.
+// Both prepare requests are initially available; deliveries interleave arbitrarily.
+// Safety only: no fairness, progress, crash recovery, or Multi-Paxos claim.
+spec BrokenPaxos {
+    enum Acceptor { A, B, C }
+    enum Value { None, Red, Blue }
+    const Ballots: Set<Int> = 1..=2;
+    const Quorums: Set<Set<Acceptor>> = filter(q in powerset(Acceptor)) { size(q) == 2 };
+    // Each ballot has one proposer, whose initial preference is fixed.
+    fn preferred(ballot: Int) -> Value { if ballot == 1 { Red } else { Blue } }
+    struct Vote { acceptor: Acceptor, ballot: Int, value: Value }
+    struct Promise { acceptor: Acceptor, ballot: Int, acceptedBallot: Int, value: Value }
+    type BallotNumber = Int where n { n >= 0 && n <= 2 }
+
+    state promised: Map<Acceptor, BallotNumber> = map(a in Acceptor) { 0 };
+    state promises: Set<Promise> = {};
+    state proposals: Map<Int, Value> = map(b in Ballots) { None };
+    // Historical acceptances: a later vote must not erase a previously chosen value.
+    state votes: Set<Vote> = {};
+
+    view latest_vote(a: Acceptor) -> Vote {
+        if !exists(v in votes) { v.acceptor == a } {
+            Vote { acceptor: a, ballot: 0, value: None }
+        } else {
+            choose(v in votes) {
+                v.acceptor == a && forall(other in votes) {
+                    other.acceptor == a => v.ballot >= other.ballot
+                }
+            }
+        }
+    }
+    view responses(ballot: Int, quorum: Set<Acceptor>) -> Set<Promise> {
+        filter(reply in promises) { reply.ballot == ballot && contains(quorum, reply.acceptor) }
+    }
+    fn highest(replies: Set<Promise>) -> Promise {
+        choose(reply in replies) {
+            forall(other in replies) { reply.acceptedBallot >= other.acceptedBallot }
+        }
+    }
+    fn select_value(ballot: Int, replies: Set<Promise>) -> Value {
+        // BUG: a higher ballot must inherit the highest prior accepted value.
+        preferred(ballot)
+    }
+    view chosen_values() -> Set<Value> {
+        filter(value in {Red, Blue}) {
+            exists(ballot in Ballots) {
+                exists(quorum in Quorums) {
+                    forall(a in quorum) { contains(votes, Vote { acceptor: a, ballot: ballot, value: value }) }
+                }
+            }
+        }
+    }
+
+    // Receive prepare(ballot). The response captures accepted state at this instant.
+    action promise(a in Acceptor, ballot in Ballots) {
+        require ballot > promised[a];
+        next promised = put(promised, a, ballot);
+        next promises = union(promises, { Promise {
+            acceptor: a, ballot: ballot, acceptedBallot: latest_vote(a).ballot, value: latest_vote(a).value
+        } });
+    }
+    // Receive a majority of promises, then broadcast one immutable proposal.
+    action propose(ballot in Ballots) {
+        pick quorum in Quorums;
+        require proposals[ballot] == None;
+        require forall(a in quorum) {
+            exists(reply in promises) { reply.ballot == ballot && reply.acceptor == a }
+        };
+        next proposals = put(proposals, ballot, select_value(ballot, responses(ballot, quorum)));
+    }
+    // Receive accept(ballot, value). Higher promises reject stale requests.
+    action accept(a in Acceptor, ballot in Ballots) {
+        require proposals[ballot] != None && ballot >= promised[a];
+        require !contains(votes, Vote { acceptor: a, ballot: ballot, value: proposals[ballot] });
+        next promised = put(promised, a, ballot);
+        next votes = union(votes, { Vote { acceptor: a, ballot: ballot, value: proposals[ballot] } });
+    }
+    // Messages may be delayed forever. Repeated delivery is idempotent.
+    action idle {}
+    next { promise, propose, accept, idle }
+
+    invariant Agreement { size(chosen_values()) <= 1 }
+    invariant Validity { forall(v in votes) { v.value == Red || v.value == Blue } }
+    invariant PromisesRespected { forall(v in votes) { v.ballot <= promised[v.acceptor] } }
+    invariant VotesMatchProposal { forall(v in votes) { v.value == proposals[v.ballot] } }
+}
