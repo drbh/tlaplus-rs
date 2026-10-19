@@ -1,0 +1,76 @@
+name: Playground
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: playground-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: playground/package-lock.json
+      - run: npm --prefix playground ci
+      - name: Test the native checker
+        run: cargo test --locked -p tla-playground -p tla-checker
+      - name: Build the browser checker and site
+        run: npm --prefix playground run build:browser
+      - name: Install Chromium
+        working-directory: playground
+        run: npx playwright install --with-deps chromium
+      - name: Test the static site
+        working-directory: playground
+        run: |
+          python3 -m http.server 7821 --bind 127.0.0.1 --directory dist > /tmp/playground.log 2>&1 &
+          server=$!
+          trap 'kill "$server"' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:7821/ > /dev/null; then break; fi
+            sleep 1
+          done
+          npm run test:browser
+      - uses: actions/upload-artifact@v4
+        with:
+          name: playground
+          path: playground/dist
+          retention-days: 1
+
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: playground/package-lock.json
+      - run: npm --prefix playground ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: playground
+          path: playground/dist
+      - name: Deploy tla.dholtz.com
+        run: npm --prefix playground run deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

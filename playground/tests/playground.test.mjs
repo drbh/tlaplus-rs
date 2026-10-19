@@ -2,6 +2,8 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {chromium,expect} from '@playwright/test';
+const browserMode=process.env.PLAYGROUND_BROWSER==='1';
+const transport=browserMode?'**/checker.wasm':'**/api/check';
 const url=process.env.PLAYGROUND_URL??'http://127.0.0.1:7821';
 // CodeMirror virtualizes off-screen lines; select through its keyboard handler.
 async function replaceSource(editor,source){await editor.click();await editor.press('ControlOrMeta+a');await editor.page().keyboard.insertText(source)}
@@ -63,7 +65,7 @@ test('inline errors, edits invalidate results, and stop ignores late responses',
     await replaceSource(editor,'spec Good { state x: Int = 0; action stay {} }');
     await expect(page.getByText('Source or settings changed.',{exact:false})).toBeVisible();
     // Delay transport so Stop and revision handling are deterministic.
-    await page.route('**/api/check',async route=>{
+    await page.route(transport,async route=>{
       await new Promise(resolve=>setTimeout(resolve,700));
       try{await route.continue()}catch{}
     });
@@ -72,13 +74,13 @@ test('inline errors, edits invalidate results, and stop ignores late responses',
     await page.waitForTimeout(900);
     await expect(page.getByRole('button',{name:'Run model →',exact:true})).toBeEnabled();
     await expect(page.getByText('Configured checks passed for this finite model.',{exact:true})).toHaveCount(0);
-    await page.unroute('**/api/check');
+    await page.unroute(transport);
     await page.getByRole('button',{name:'Run model →',exact:true}).click();
     await expect(page.getByText('Configured checks passed for this finite model.',{exact:true})).toBeVisible();
   }finally{await browser.close()}
 });
 
-test('disconnect terminates an executing native checker process',async()=>{
+test('disconnect terminates an executing native checker process',{skip:browserMode},async()=>{
   const {execFileSync}=await import('node:child_process');
   const processes=()=>execFileSync('ps',['-axo','pid=,command='],{encoding:'utf8'}).split('\n')
     .filter(line=>/target\/debug\/tla-playground .*request\.json/.test(line));
@@ -151,7 +153,7 @@ test('Paxos verifies agreement and visualizes the broken historical majorities',
   }finally{await browser.close()}
 });
 
-test('automatic checks debounce edits, cancel outdated runs, and preserve mobile editing',async()=>{
+test('automatic checks debounce edits, cancel outdated runs, and preserve mobile editing',{skip:browserMode},async()=>{
   const browser=await chromium.launch();
   try{
     const page=await browser.newPage({viewport:{width:390,height:844}});
@@ -217,4 +219,32 @@ test('searchable library, editor controls, and highlighted generated source',asy
     await expect(page.locator('.generated-editor .cm-content')).toHaveAttribute('contenteditable','false');
     assert(await page.locator('.generated-editor .cm-line span').count()>5,'generated code is highlighted');
   }finally{await browser.close()}
+});
+
+
+test('browser checks stay local and terminate on Stop and timeout',{skip:!browserMode},async()=>{
+  const browser=await chromium.launch();
+  try {
+    const page=await browser.newPage();
+    const api=[];
+    page.on('request',r=>{if(r.url().includes('/api/'))api.push(r.url())});
+    await page.goto(url);
+    await expect(page.locator('.verdict')).toContainText('Invariant NotSolved is violated.');
+    await page.getByRole('button',{name:'● Auto',exact:true}).click();
+    const editor=page.getByRole('textbox',{name:'Model source'});
+    await replaceSource(editor,'spec Slow { recursive fn work(n: Int) -> Int { if n == 0 { 1 } else { work(n - 1) + work(n - 1) } } state x: Int = work(40); action stay {} }');
+    const started=page.waitForEvent('worker');
+    await page.getByRole('button',{name:'Run model →',exact:true}).click();
+    const worker=await started;
+    const closed=worker.waitForEvent('close');
+    await page.getByRole('button',{name:'Stop',exact:true}).click();
+    await closed;
+    await expect(page.getByRole('button',{name:'Run model →',exact:true})).toBeEnabled();
+    await page.getByRole('button',{name:'Run model →',exact:true}).click();
+    await expect(page.locator('.verdict')).toContainText('15-second time limit reached.',{timeout:20000});
+    await replaceSource(editor,'spec Good { state x: Int = 0; action stay {} }');
+    await page.getByRole('button',{name:'Run model →',exact:true}).click();
+    await expect(page.locator('.verdict')).toContainText('Configured checks passed');
+    assert.deepEqual(api,[],'browser checking never sends model source to an API');
+  } finally {await browser.close()}
 });

@@ -20,6 +20,9 @@ fn execute(request: Request) -> Result<Value, Value> {
     if request.source.len() + request.config.len() > 256_000 {
         return Err(error("Source exceeds 256 KB".into()));
     }
+    #[cfg(target_os = "wasi")]
+    let dir = tempfile::tempdir_in("/tmp").map_err(|e| error(e.to_string()))?;
+    #[cfg(not(target_os = "wasi"))]
     let dir = tempfile::tempdir().map_err(|e| error(e.to_string()))?;
     let (module, source, config, artifact) = match request.language.as_str() {
         "tsl" => {

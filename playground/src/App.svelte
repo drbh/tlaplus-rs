@@ -1,5 +1,6 @@
 <script lang="ts">
   import {onMount} from 'svelte';
+  import {check,browserChecker} from './lib/checker';
   import Editor from './components/Editor.svelte';
   import Inspector from './components/Inspector.svelte';
   import Graph from './components/Graph.svelte';
@@ -36,8 +37,7 @@
   async function run(showResults=false){
     stop();elapsed=0;const started=performance.now();const ticker=setInterval(()=>elapsed=(performance.now()-started)/1000,100);const runId=revision;const abort=new AbortController();controller=abort;busy=true;
     try{
-      const response=await fetch('/api/check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({language,source,config,maxStates:limit}),signal:abort.signal});
-      const next:Result=await response.json();
+      const next=await check({language,source,config,maxStates:limit},abort.signal);
       if(runId!==revision)return;
       result=next;stale=false;step=0;selected=0;tab=next.trace?.length?'trace':'graph';if(showResults)mobile='result';
     }catch(e){if(!abort.signal.aborted&&runId===revision){result={status:'error',message:`Could not run checker: ${e}`};stale=false;}}
@@ -85,7 +85,7 @@
   <div class="library-foot">{filtered.length} examples · editable TSL and TLA+ · Escape to close</div>
 </dialog>
 <div class="app">
-  <header><div class="brand"><b>tla<span>·</span></b><div>Model studio<small>Explore every possibility.</small></div></div><div class="header-actions"><button class="browse" onclick={openLibrary}>Examples <kbd>⌘ K</kbd></button><button onclick={share}>{copied?'Copied':'Share'}</button><button onclick={download}>Download</button><span class="local">LOCAL CHECKER</span></div></header>
+  <header><div class="brand"><b>tla<span>·</span></b><div>Model studio<small>Explore every possibility.</small></div></div><div class="header-actions"><button class="browse" onclick={openLibrary}>Examples <kbd>⌘ K</kbd></button><button onclick={share}>{copied?'Copied':'Share'}</button><button onclick={download}>Download</button><span class="local">{browserChecker?'BROWSER CHECKER':'LOCAL CHECKER'}</span></div></header>
   <div class="mobile-tabs"><button class:active={mobile==='source'} onclick={()=>mobile='source'}>Source</button><button class:active={mobile==='result'} onclick={()=>mobile='result'}>Results {busy?'◌':result?'•':''}</button></div>
   <main style={`--left:${left}%`} class:show-result={mobile==='result'}>
     <section class="source-pane">
@@ -119,5 +119,5 @@
       {:else}<div class="welcome"><div class="eyebrow">YOUR MODEL, EXPLAINED</div><h1>A little code.<br/>Every possible path.</h1><p>Edit on the left. After you pause, the checker explores your model and shows what can happen.</p><div class="preview-path" aria-hidden="true"><span>S₀</span><i>→</i><span>S₁</span><i>→</i><span class="target">S₂</span></div><div class="welcome-cards"><div><strong>Follow a trace</strong><span>See the exact steps behind a failed property—or a puzzle solution.</span></div><div><strong>Explore the graph</strong><span>Select a reachable state and inspect the actions that connect it.</span></div></div><p class="welcome-foot">{pending?'Starting automatically…':busy?'Exploring your model…':'Enable Auto or run your model to begin.'}</p></div>{/if}
     </section>
   </main>
-  <footer><span>Finite-state model checking · native engine</span><span>Local prototype · 15 s / 2,000 states max · results are not an unbounded proof</span></footer>
+  <footer><span>Finite-state model checking · {browserChecker?'runs in your browser':'native engine'}</span><span>15 s / 2,000 states max · results are not an unbounded proof</span></footer>
 </div>

@@ -8,9 +8,13 @@
     "build": "svelte-check && vite build",
     "check": "svelte-check",
     "preview": "npm run checker && vite preview --host 127.0.0.1",
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "build:browser": "bash tools/build-browser.sh",
+    "deploy": "wrangler deploy --config cloud/wrangler.toml",
+    "test:browser": "PLAYGROUND_BROWSER=1 node --test tests/*.test.mjs"
   },
   "dependencies": {
+    "@bjorn3/browser_wasi_shim": "0.4.2",
     "@codemirror/commands": "6.8.0",
     "@codemirror/language": "6.11.0",
     "@codemirror/lint": "6.8.4",
@@ -27,6 +31,7 @@
     "svelte": "5.57.1",
     "svelte-check": "4.7.6",
     "typescript": "5.9.3",
-    "vite": "8.3.1"
+    "vite": "8.3.1",
+    "wrangler": "4.151.1"
   }
 }
