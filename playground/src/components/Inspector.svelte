@@ -1,26 +1,17 @@
 <script lang="ts">
-  import type {Binding,Value} from '../lib/types';
-  let {values,previous=[]}: {values:Binding[];previous?:Binding[]}=$props();
-  function rows(bindings:Binding[]) {
-    const result:{path:string;value:string}[]=[];
-    function visit(path:string,value:Value){
-      if(value.kind==='function' && (value.data as unknown[]).length) {
-        for(const [key,child] of value.data as [Value,Value][])visit(`${path}[${key.text}]`,child);
-      } else result.push({path,value:value.text});
-    }
-    for(const item of bindings)visit(item.name,item.value);
-    return result;
-  }
-  let current=$derived(rows(values)); let old=$derived(new Map(rows(previous).map(r=>[r.path,r.value])));
+  import type {Binding} from '../lib/types';
+  import {stateRows} from '../lib/state-view';
+  let {values,previous=[],comparison='previous trace step'}: {values:Binding[];previous?:Binding[];comparison?:string}=$props();
+  let changedOnly=$state(false);
+  let current=$derived(stateRows(values));
+  let old=$derived(new Map(stateRows(previous).map(row=>[row.path,row.value])));
+  let all=$derived([...current.map(row=>({...row,before:old.get(row.path),changed:previous.length>0&&old.get(row.path)!==row.value})),...[...old].filter(([path])=>!current.some(row=>row.path===path)).map(([path,before])=>({path,value:'removed',before,changed:true}))]);
+  let changed=$derived(all.filter(row=>row.changed).length);
 </script>
 <div class="inspector">
-  <div class="eyebrow">State values <span>· changed values highlighted</span></div>
-  {#each current as row}
-    <div class:changed={previous.length>0&&old.get(row.path)!==row.value} class="value-row">
-      <code>{row.path}</code><div>{#if previous.length>0&&old.has(row.path)&&old.get(row.path)!==row.value}<del>{old.get(row.path)}</del> → {/if}<strong>{row.value}</strong></div>
-    </div>
+  <div class="inspector-head"><div><span class="eyebrow">State values</span><span class="comparison">{previous.length?`${changed}/${all.length} changed · vs ${comparison}`:`${all.length} values · no comparison`}</span></div><label><input type="checkbox" bind:checked={changedOnly} disabled={!previous.length}/> Changed only</label></div>
+  {#each all.filter(row=>!changedOnly||!previous.length||row.changed) as row}
+    <div class:changed={row.changed} class="value-row"><code>{row.path}</code><div>{#if row.changed&&row.before!==undefined}<del>{row.before}</del><span class="value-arrow"> → </span>{/if}<strong>{row.value}</strong></div></div>
   {/each}
-  {#each [...old].filter(([path])=>!current.some(row=>row.path===path)) as [path,value]}
-    <div class="value-row changed"><code>{path}</code><div><del>{value}</del> → removed</div></div>
-  {/each}
+  {#if changedOnly&&previous.length&&changed===0}<p class="inspector-empty">No values changed.</p>{/if}
 </div>

@@ -107,7 +107,7 @@ test('all nine gallery puzzles run and render their selected state',async()=>{
       await page.getByLabel('Example',{exact:true}).selectOption({label:title});
       await page.getByRole('button',{name:'Run model →',exact:true}).click();
       await expect(page.locator('.verdict')).toContainText(/Invariant (NoSolution|NotSolved) is violated/);
-      const steps=page.locator('.timeline button');await steps.last().click();
+      const steps=page.locator('.trace-select');await steps.last().click();
       const projection=page.getByRole('region',{name:'Puzzle state view'});
       await expect(projection).toBeVisible();
       await expect(projection).not.toContainText('does not match');
@@ -142,7 +142,7 @@ test('Paxos verifies agreement and visualizes the broken historical majorities',
     await page.getByRole('button',{name:'Run model →',exact:true}).click();
     await expect(page.locator('.verdict')).toContainText('Invariant Agreement is violated',{timeout:20000});
     await expect(page.getByText('10 transitions',{exact:true})).toBeVisible();
-    await page.locator('.timeline button').last().click();
+    await page.locator('.trace-select').last().click();
     const view=page.getByRole('region',{name:'Paxos state view'});
     await expect(view).not.toContainText('does not match');
     await expect(view.locator('.proposals')).toContainText('Red');
@@ -247,4 +247,41 @@ test('browser checks stay local and terminate on Stop and timeout',{skip:!browse
     await expect(page.locator('.verdict')).toContainText('Configured checks passed');
     assert.deepEqual(api,[],'browser checking never sends model source to an API');
   } finally {await browser.close()}
+});
+
+test('dense traces link exact states and large graphs retain edge navigation',async()=>{
+  const browser=await chromium.launch();
+  try {
+    const page=await browser.newPage();await page.goto(url);
+    await expect(page.locator('.trace-table tbody tr')).toHaveCount(7);
+    await page.getByRole('button',{name:'Select trace step 1',exact:true}).click();
+    await expect(page.locator('.trace-table tr.selected td.delta')).toHaveCount(1);
+    await page.getByLabel('Changed only').check();
+    await expect(page.locator('.value-row')).toHaveCount(1);
+    await page.getByRole('button',{name:/Graph S\d+ ↗/}).click();
+    await expect(page.getByRole('table',{name:'State transitions',exact:true})).toBeVisible();
+    await expect(page.locator('.comparison')).toContainText('discovery parent');
+    await page.getByRole('button',{name:'● Auto',exact:true}).click();
+    const editor=page.getByRole('textbox',{name:'Model source'});
+    await replaceSource(editor,'spec Many { state x: Int = 0; action increment { require x < 299; next x = x + 1; } action stay {} }');
+    await page.getByRole('button',{name:'Run model →',exact:true}).click();
+    await expect(page.locator('.verdict')).toContainText('Configured checks passed');
+    await expect(page.getByLabel('Graph scope')).toHaveValue('neighbors');
+    await expect(page.locator('.graph-navigation')).toContainText('2/300 states');
+    await page.getByLabel('Find state ID').fill('299');await page.getByRole('button',{name:'Go',exact:true}).click();
+    await expect(page.getByRole('button',{name:'Select state 299',exact:true})).toBeVisible();
+    await expect(page.getByRole('heading',{name:'State S299',exact:true})).toBeVisible();
+    await page.getByRole('button',{name:'Outgoing 1',exact:true}).click();
+    await page.getByRole('button',{name:'→ S299 ↶',exact:true}).click();
+    await expect(page.locator('.comparison')).toContainText('0/1 changed · vs edge source S299');
+    await page.getByRole('button',{name:'Incoming 2',exact:true}).click();
+    const edge=page.getByRole('table',{name:'State transitions',exact:true}).locator('tbody tr').filter({hasText:'increment'});
+    await edge.getByRole('button',{name:'→ S299',exact:true}).click();
+    await expect(page.locator('.comparison')).toContainText('1/1 changed · vs edge source S298');
+    await page.getByLabel('Graph scope').selectOption('overview');
+    await expect(page.locator('.graph-navigation')).toContainText('50/300 states');
+    await page.getByRole('button',{name:'← 250',exact:true}).click();
+    await expect(page.locator('.graph-navigation')).toContainText('250/300 states');
+    await expect(page.locator('svg g[role=button]')).toHaveCount(250);
+  }finally{await browser.close()}
 });

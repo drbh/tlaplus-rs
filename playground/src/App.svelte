@@ -4,6 +4,7 @@
   import Editor from './components/Editor.svelte';
   import Inspector from './components/Inspector.svelte';
   import Graph from './components/Graph.svelte';
+  import Trace from './components/Trace.svelte';
   import PuzzleView from './components/PuzzleView.svelte';
   import {examples,sourceFor} from './lib/examples';
   import type {Language,Result,Action} from './lib/types';
@@ -11,13 +12,13 @@
   let source=$state(sourceFor(0,'tsl')), config=$state('');
   let result=$state.raw<Result|undefined>(), busy=$state(false), stale=$state(false);
   let tab=$state<'trace'|'graph'|'generated'>('trace'), selected=$state(0), step=$state(0);
+  let comparedFrom=$state<number|undefined>();
+  function selectGraph(id:number,from?:number){selected=id;comparedFrom=from}
   let limit=$state(500), copied=$state(false), left=$state(47), mobile=$state<'source'|'result'>('source');
   let editor:Editor, controller:AbortController|undefined, revision=0;
   let pending=$state(false),auto=$state(true),elapsed=$state(0),query=$state('');
   let timer:ReturnType<typeof setTimeout>|undefined, mounted=false;
   let dialog:HTMLDialogElement;
-  let timeline=$state<HTMLDivElement>();
-  $effect(()=>{const selectedStep=step;if(timeline)timeline.querySelectorAll('button')[selectedStep]?.scrollIntoView({block:'nearest',inline:'nearest'})});
   let filtered=$derived(examples.map((item,index)=>({...item,index})).filter(item=>`${item.title} ${item.note}`.toLowerCase().includes(query.toLowerCase())));
   let filename=$derived((source.match(/^\s*(?:-+\s*MODULE|spec|module)\s+([A-Za-z0-9_]+)/m)?.[1]??'Model')+'.'+language);
   function schedule(){clearTimeout(timer);pending=false;if(!mounted||!auto)return;pending=true;timer=setTimeout(()=>{pending=false;void run()},800)}
@@ -29,7 +30,8 @@
   let saved:Partial<Record<Language,{source:string;config:string}>>={};
   let current=$derived(result?.trace?.[step]);
   let node=$derived(result?.graph?.nodes.find(n=>n.id===selected));
-  let parent=$derived(result?.graph?.nodes.find(n=>n.id===node?.parent));
+  let parent=$derived(result?.graph?.nodes.find(n=>n.id===(comparedFrom??node?.parent)));
+  let comparison=$derived(parent?`${comparedFrom!==undefined?'edge source':'discovery parent'} S${parent.id}`:'none');
   function persist(){try{localStorage.setItem('tla.playground.v1',JSON.stringify({source,config,language,example,limit}))}catch{}}
   function edit(text:string){source=text;changed()}
   function changed(){stop();stale=!!result;persist();schedule()}
@@ -39,7 +41,7 @@
     try{
       const next=await check({language,source,config,maxStates:limit},abort.signal);
       if(runId!==revision)return;
-      result=next;stale=false;step=0;selected=0;tab=next.trace?.length?'trace':'graph';if(showResults)mobile='result';
+      result=next;stale=false;step=0;selected=0;comparedFrom=undefined;tab=next.trace?.length?'trace':'graph';if(showResults)mobile='result';
     }catch(e){if(!abort.signal.aborted&&runId===revision){result={status:'error',message:`Could not run checker: ${e}`};stale=false;}}
     finally{clearInterval(ticker);if(controller===abort){busy=false;controller=undefined}}
   }
@@ -103,15 +105,14 @@
       {#if result}
         <div class={`verdict ${result.status}`} role="status"><div class="eyebrow">{result.status==='violated'?'COUNTEREXAMPLE':result.status.toUpperCase()}</div><h2>{result.message}</h2>{#if result.statistics}<div class="stats"><span><b>{result.statistics.states}</b> states retained</span><span><b>{result.statistics.initial}</b> initial</span><span><b>{result.statistics.depth}</b> reported search depth</span></div>{/if}{#if result.location}<button disabled={stale} onclick={()=>{mobile='source';editor.reveal(result!.location!.line,result!.location!.column)}}>Go to line {result.location.line}</button>{/if}</div>
         <div class="output">
+          {#if result.properties?.length}<details class="property-results"><summary>Temporal checks · {result.properties.filter(p=>p.holds).length}/{result.properties.length} hold</summary><table aria-label="Temporal checks"><tbody>{#each result.properties as property}<tr><th>{property.name}</th><td class:property-failed={!property.holds}>{property.holds?'holds':'violated'}</td></tr>{/each}</tbody></table></details>{/if}
           {#if tab==='trace'}
             {#if result.trace?.length}
-              <div class="trace-heading"><h3>Counterexample trace</h3><span>{result.loopBack?'Repeating behavior':`${result.trace.length-1} transitions`}</span></div>
-              <div class="timeline" bind:this={timeline}>{#each result.trace as item,i}<button class:chosen={step===i} onclick={()=>step=i}><small>{i===0?'INITIAL':`STEP ${i}`}</small><strong>{item.action?.name??'Start'}</strong><span>{i===result.trace!.length-1&&!result.loopBack?'● violation':`State ${i+1}`}</span></button>{/each}</div>
-              {#if result.loopBack}<div class="notice">After the last state, return to state {result.loopBack.index+1}{result.loopBack.stuttering?' and stutter forever':'; repeat the cycle forever'}. This is a liveness counterexample, not a finite dead end.</div>{/if}
-              {#if current}<div class="step-controls"><button disabled={step===0} onclick={()=>step--}>← Previous</button><span>State {step+1} of {result.trace.length}</span><button disabled={step===result.trace.length-1} onclick={()=>step++}>Next →</button>{#if current.action?.line}<button disabled={stale} onclick={()=>reveal(current.action)}>Show action ↗</button>{/if}</div><PuzzleView kind={examples[example].puzzle} values={current.values}/><Inspector values={current.values} previous={step>0?result.trace[step-1].values:[]}/>{/if}
+              <Trace trace={result.trace} loopBack={result.loopBack} graph={result.graph} selected={step} onselect={i=>step=i} onreveal={reveal} ongraph={id=>{selectGraph(id);tab='graph'}} {stale}/>
+              {#if current}<Inspector values={current.values} previous={step>0?result.trace[step-1].values:[]} comparison={`trace step ${step-1}`}/><PuzzleView kind={examples[example].puzzle} values={current.values}/>{/if}
             {:else}<div class="empty"><h3>No counterexample trace</h3><p>{result.status==='passed'?'Explore the state graph to see all checked behavior.':'This result has no finite state trace to display.'}</p></div>{/if}
           {:else if tab==='graph'}
-            {#if result.graph}<Graph graph={result.graph} {selected} onselect={id=>selected=id}/>{#if node}<div class="trace-heading"><h3>State S{node.id}</h3><span>{node.expanded?'Successors explored':'Not fully expanded'}</span></div>{#if parent}<p class="legend">Changes compared with discovery parent S{parent.id}.</p>{/if}<PuzzleView kind={examples[example].puzzle} values={node.values}/><Inspector values={node.values} previous={parent?.values??[]}/><div class="transitions"><div class="eyebrow">Observed outgoing transitions</div>{#each result.graph.edges.filter(e=>e.from===selected).slice(0,100) as edge}<button onclick={()=>selected=edge.to}>{edge.action.name} → S{edge.to}</button>{/each}</div>{/if}{:else}<div class="empty">No graph is available for this result.</div>{/if}
+            {#if result.graph}<Graph graph={result.graph} {selected} onselect={selectGraph} onreveal={reveal} {stale}/>{#if node}<div class="trace-heading"><h3>State S{node.id}</h3><span>{node.expanded?'Successors explored':'Not fully expanded'}</span></div><Inspector values={node.values} previous={parent?.values??[]} {comparison}/><PuzzleView kind={examples[example].puzzle} values={node.values}/>{/if}{:else}<div class="empty">No graph is available for this result.</div>{/if}
           {:else}
             {#if result.generated}<div class="trace-heading"><h3>Compiled model</h3><button disabled={stale} onclick={openGenerated}>Open as editable TLA+ ↗</button></div><div class="generated-editor"><Editor source={result.generated.source} language="tla" readonly/></div><h3>TLC configuration</h3><pre>{result.generated.config}</pre>{:else}<div class="empty">Run a TSL model to inspect its generated TLA+ and configuration. Direct TLA+ runs use your source as written.</div>{/if}
           {/if}

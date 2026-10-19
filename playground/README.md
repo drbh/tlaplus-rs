@@ -61,17 +61,25 @@ until the next run.
 
 ## Read results
 
-- **Trace:** actual counterexample steps, action names, original TSL action
-  locations, and changes to nested values. A temporal trace explicitly identifies
-  its loop-back state. Temporal edges currently have a generic label.
-- **State graph:** recorded transitions, including cycles and self loops, laid
-  out by discovery depth. Click a state to inspect values and outgoing edges.
-  Dashed nodes were not fully expanded. A failed or limited exploration is
-  labeled partial. Symmetry-reduced graphs are labeled as quotients.
+- **Trace:** a compact sequence table with action names, change counts, and
+  selectable value columns. Changed cells show their before/after values on
+  hover. Arrow keys move between steps; source links reveal original TSL actions.
+  Temporal traces mark their loop target and provide a jump back to it. Temporal
+  edges currently have a generic label. Exact state matches link into the graph.
+- **State graph:** compact ranks show discovery depth while retaining actual
+  transitions, including merges, back edges, and self loops. Choose a variable
+  to label states. Large graphs default to the selected state's one-hop
+  neighborhood (up to 80 nodes); overview windows show up to 250 nodes. Find a
+  state by ID or follow incoming/outgoing transition rows to navigate the entire
+  recorded graph. The diagram reports shown/total counts; its limits do not
+  change the checker verdict. Dashed states were not fully expanded. Incomplete
+  exploration and symmetry quotients remain explicitly labeled.
 - **Generated TLA+:** inspect the compiler's real output and configuration.
 
-The inspector compares trace states with their predecessor, or graph states
-with their discovery parent. Counts refer to exploration, not necessarily to
+The compact inspector has a changed-only filter. It compares trace states with
+their predecessor. Clicking a graph node compares against its discovery parent;
+following an edge destination compares against that edge's source, including
+self loops. The comparison basis is always shown. Counts refer to exploration, not necessarily to
 trace length. State, time, and display limits never produce a passing verdict.
 
 ## Native development server boundaries
@@ -83,8 +91,8 @@ OS memory limit. Do not expose the development server to untrusted users.
 
 Runs are limited to 15 seconds and at most 2,000 states; the server accepts two
 concurrent runs. Source plus configuration is limited to 256 KB, requests to
-300 KB, and returned JSON to 16 MB. The diagram draws at most 250 states and
-1,200 edges, separately from checker limits. Single-file models and bundled
+300 KB, and returned JSON to 16 MB. Each graph overview window draws at most 250 states and
+1,200 edges, separately from checker limits; neighborhood views show at most 80 states. Single-file models and bundled
 standard TLA+ modules are supported; sibling file imports are not yet supported.
 Source maps currently link TSL actions, not arbitrary native TLA+ operators.
 The checker supports its native TLA+ subset, not every TLC feature.
