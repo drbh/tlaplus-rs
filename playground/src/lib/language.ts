@@ -41,14 +41,14 @@ export function modelLanguage(language:Language){
   });
 }
 export const modelColors=syntaxHighlighting(HighlightStyle.define([
-  {tag:tags.keyword,color:'#c8a4fa'},
-  {tag:tags.typeName,color:'#f1ca85'},
-  {tag:tags.function(tags.variableName),color:'#80c7ff'},
-  {tag:tags.variableName,color:'#d5ddeb'},
-  {tag:tags.operator,color:'#91a8cd'},
-  {tag:tags.bool,color:'#f1aa83'},
-  {tag:tags.number,color:'#f1aa83'},
-  {tag:tags.string,color:'#9cddb6'},
-  {tag:tags.comment,color:'#8492a9',fontStyle:'italic'},
-  {tag:[tags.bracket,tags.punctuation],color:'#a8b6cc'}
+  {tag:tags.keyword,color:'#c678dd'},
+  {tag:tags.typeName,color:'#e5c07b'},
+  {tag:tags.function(tags.variableName),color:'#61afef'},
+  {tag:tags.variableName,color:'#abb2bf'},
+  {tag:tags.operator,color:'#56b6c2'},
+  {tag:tags.bool,color:'#d19a66'},
+  {tag:tags.number,color:'#d19a66'},
+  {tag:tags.string,color:'#98c379'},
+  {tag:tags.comment,color:'#7f848e',fontStyle:'italic'},
+  {tag:[tags.bracket,tags.punctuation],color:'#abb2bf'}
 ]));

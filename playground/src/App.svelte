@@ -85,7 +85,7 @@
   <div class="library-foot">{filtered.length} examples · editable TSL and TLA+ · Escape to close</div>
 </dialog>
 <div class="app">
-  <header><div class="brand"><b>tla<span>·</span></b><div>Model studio<small>Explore every possibility.</small></div></div><div class="header-actions"><button class="browse" onclick={openLibrary}>Examples <kbd>⌘ K</kbd></button><button onclick={share}>{copied?'Copied':'Share'}</button><button onclick={download}>Download</button><span class="local">{browserChecker?'BROWSER CHECKER':'LOCAL CHECKER'}</span></div></header>
+  <header><span class="brand">tla</span><span class="sub">playground</span><div class="header-actions"><button class="browse" onclick={openLibrary}>Examples <kbd>⌘ K</kbd></button><button onclick={share}>{copied?'Copied':'Share'}</button><button onclick={download}>Download</button><span class="local">{browserChecker?'BROWSER CHECKER':'LOCAL CHECKER'}</span></div></header>
   <div class="mobile-tabs"><button class:active={mobile==='source'} onclick={()=>mobile='source'}>Source</button><button class:active={mobile==='result'} onclick={()=>mobile='result'}>Results {busy?'◌':result?'•':''}</button></div>
   <main style={`--left:${left}%`} class:show-result={mobile==='result'}>
     <section class="source-pane">

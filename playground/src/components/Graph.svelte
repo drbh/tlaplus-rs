@@ -20,15 +20,15 @@
 {#if graph.nodes.length>250||graph.edges.length>1200}<p class="notice">Display limited to 250 states / 1,200 edges. This is a display limit, separate from the checker’s verdict.</p>{/if}
 <div class="graph-scroll">
   <svg width={width*zoom} height={height*zoom} viewBox={`0 0 ${width} ${height}`} aria-label="Explored state transitions">
-    <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#64778d"/></marker></defs>
+    <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="var(--faint)"/></marker></defs>
     {#each edges as edge}
-      <path d={path(edge.from,edge.to)} fill="none" stroke={edge.from===selected||edge.to===selected?'#68d9bd':'#3a485b'} stroke-width={edge.from===selected||edge.to===selected?2:1} marker-end="url(#arrow)"><title>S{edge.from} → S{edge.to}: {edge.action.name}</title></path>
+      <path d={path(edge.from,edge.to)} fill="none" stroke={edge.from===selected||edge.to===selected?'var(--accent)':'var(--line)'} stroke-width={edge.from===selected||edge.to===selected?2:1} marker-end="url(#arrow)"><title>S{edge.from} → S{edge.to}: {edge.action.name}</title></path>
     {/each}
     {#each nodes as node}
       {@const p=positions.get(node.id)!}
       <g role="button" tabindex="0" aria-label={`Select state ${node.id}`} onclick={()=>onselect(node.id)} onkeydown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();onselect(node.id)}}}>
-        <circle cx={p.x} cy={p.y} r="25" fill={node.id===selected?'#20463f':'#17202d'} stroke={node.id===selected?'#7ce6c9':node.parent===null?'#93b7ff':'#617089'} stroke-width="2" stroke-dasharray={node.expanded?'':'4 3'}/>
-        <text x={p.x} y={p.y+4} text-anchor="middle" fill="#e5edf6" font-size="12">S{node.id}</text>
+        <circle cx={p.x} cy={p.y} r="25" fill={node.id===selected?'var(--accent-bg)':'var(--panel)'} stroke={node.id===selected?'var(--accent)':node.parent===null?'var(--accent)':'var(--faint)'} stroke-width="2" stroke-dasharray={node.expanded?'':'4 3'}/>
+        <text x={p.x} y={p.y+4} text-anchor="middle" fill="var(--ink)" font-size="12">S{node.id}</text>
         <title>{node.values.map(v=>`${v.name} = ${v.value.text}`).join('\n')}{node.expanded?'':'\nSuccessors not fully explored'}</title>
       </g>
     {/each}

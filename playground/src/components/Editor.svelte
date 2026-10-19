@@ -12,18 +12,18 @@
   let wrap=$state(false),fontSize=$state(13),position=$state('Ln 1, Col 1');
   const syntax=new Compartment(),presentation=new Compartment(); let loading=false;
   function appearance(){return [EditorView.theme({
-    '&':{height:'100%',background:'#10151f',color:'#d5ddeb'},
-    '.cm-scroller':{overflow:'auto',fontFamily:'var(--mono)',fontSize:`${fontSize}px`,lineHeight:'1.75'},
-    '.cm-content':{padding:'16px 0',caretColor:'#83e2c2'},
+    '&':{height:'100%',background:'var(--workspace-bg)',color:'var(--ink)'},
+    '.cm-scroller':{overflow:'auto',fontFamily:'var(--mono)',fontSize:`${fontSize}px`,lineHeight:'1.5'},
+    '.cm-content':{padding:'8px 0',caretColor:'var(--accent)'},
     '.cm-line':{padding:'0 20px 0 12px'},
-    '.cm-gutters':{background:'#10151f',color:'#627189',borderRight:'none',paddingRight:'8px'},
-    '.cm-activeLine, .cm-activeLineGutter':{background:'#1c283b66'},
-    '.cm-cursor':{borderLeftColor:'#83e2c2'},
-    '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection':{background:'#36547488'},
-    '.cm-searchMatch':{background:'#80642f88',outline:'1px solid #ba975e'},
-    '.cm-panels':{background:'#1a2434',color:'#d5ddeb'},
-    '.cm-tooltip':{background:'#1a2434',color:'#d5ddeb',border:'1px solid #3b4b63'},
-    '.cm-foldPlaceholder':{background:'#25354a',color:'#b9d1ed',border:'none'}
+    '.cm-gutters':{background:'var(--workspace-bg)',color:'var(--faint)',borderRight:'1px solid var(--line-light)',paddingRight:'8px'},
+    '.cm-activeLine, .cm-activeLineGutter':{background:'#ffffff08'},
+    '.cm-cursor':{borderLeftColor:'var(--accent)'},
+    '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection':{background:'#304554'},
+    '.cm-searchMatch':{background:'#63512e',outline:'1px solid var(--warn)'},
+    '.cm-panels':{background:'var(--toolbar)',color:'var(--ink)'},
+    '.cm-tooltip':{background:'var(--toolbar)',color:'var(--ink)',border:'1px solid var(--line)'},
+    '.cm-foldPlaceholder':{background:'var(--panel-2)',color:'var(--ink)',border:'none'}
   },{dark:true}),...(wrap?[EditorView.lineWrapping]:[])];}
   onMount(()=>{
     editor=new EditorView({parent,doc:source,extensions:[basicSetup,modelColors,syntax.of(modelLanguage(language)),presentation.of(appearance()),
@@ -44,5 +44,5 @@
 <div class="editor" bind:this={parent}></div>
 {#if !readonly}<div class="editor-status"><span>{position}</span><span class="editor-hint">⌘/Ctrl F to find</span><button class:enabled={wrap} aria-pressed={wrap} onclick={()=>wrap=!wrap} title="Toggle line wrapping">Wrap</button><button aria-label="Decrease editor font size" disabled={fontSize<=11} onclick={()=>fontSize--}>A−</button><button aria-label="Increase editor font size" disabled={fontSize>=20} onclick={()=>fontSize++}>A+</button></div>{/if}
 <style>
-.editor{flex:1;min-height:0;overflow:hidden}.editor-status{display:flex;align-items:center;gap:12px;min-height:33px;padding:0 16px;border-top:1px solid var(--line);font-size:10px;color:var(--muted);background:#111925}.editor-status>span:first-child{margin-right:auto}.editor-status button{padding:3px 5px;border:0;background:transparent;font-size:10px}.enabled{color:var(--accent)}@media(max-width:500px){.editor-hint{display:none}}
+.editor{flex:1;min-height:0;overflow:hidden}.editor-status{display:flex;align-items:center;gap:12px;min-height:26px;padding:0 10px;border-top:1px solid var(--line);font-size:10px;color:var(--muted);background:var(--toolbar)}.editor-status>span:first-child{margin-right:auto}.editor-status button{padding:3px 5px;border:0;background:transparent;font-size:10px}.enabled{color:var(--accent)}@media(max-width:500px){.editor-hint{display:none}}
 </style>
