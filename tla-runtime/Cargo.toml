@@ -1,11 +1,13 @@
 [package]
-name = "tla-runtime"
+name = "tlaplus-runtime"
 version.workspace = true
 edition.workspace = true
-publish.workspace = true
+description = "Runtime support for evaluating TLA+ in tlaplus-rs"
+license.workspace = true
+repository.workspace = true
 
 [dependencies]
-tla-values = { path = "../tla-values" }
-tla-value-expr = { path = "../tla-value-expr" }
-tla-library = { path = "../tla-library" }
+tlaplus-values = { path = "../tla-values", version = "0.1.0" }
+tlaplus-value-expr = { path = "../tla-value-expr", version = "0.1.0" }
+tlaplus-library = { path = "../tla-library", version = "0.1.0" }
 

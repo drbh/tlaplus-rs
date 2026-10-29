@@ -1,7 +1,7 @@
 use crate::{BoundModel, Error, State, Value};
 use std::ops::ControlFlow;
-use tla_eval::{Evaluator, bind};
-use tla_ir::{Builtin, Expr, ExprId, Quantifier};
+use tlaplus_eval::{Evaluator, bind};
+use tlaplus_ir::{Builtin, Expr, ExprId, Quantifier};
 
 type Partial = Vec<Option<Value>>;
 type Flow = Result<ControlFlow<()>, Error>;
@@ -93,7 +93,7 @@ fn with_evaluator<R>(
 }
 impl Generator<'_> {
     fn if_guard(&self, id: ExprId, value: Value) -> Result<bool, Error> {
-        use tla_eval::BooleanContext::{EnabledIf, InitialIf, NextIf};
+        use tlaplus_eval::BooleanContext::{EnabledIf, InitialIf, NextIf};
         let context = match (self.enabled, self.initial) {
             (true, _) => EnabledIf,
             (false, true) => InitialIf,
@@ -327,9 +327,9 @@ impl Generator<'_> {
         {
             let domain = self.evaluate(args[1], &candidate, locals)?;
             let values = if op == Builtin::SubsetEq {
-                tla_eval::SetExpr::subsets(&domain)?
+                tlaplus_eval::SetExpr::subsets(&domain)?
             } else {
-                tla_eval::SetExpr::finite(&domain)?
+                tlaplus_eval::SetExpr::finite(&domain)?
             };
             for value in values.iter()? {
                 if self
@@ -505,7 +505,7 @@ impl Generator<'_> {
                 let function = if self.model.boolean(
                     function,
                     self.evaluate(*condition, &candidate, locals)?,
-                    tla_eval::BooleanContext::If,
+                    tlaplus_eval::BooleanContext::If,
                 )? {
                     *then_expr
                 } else {

@@ -2,8 +2,8 @@
 use super::Error;
 use std::path::{Path, PathBuf};
 
-pub fn compile(path: &Path) -> Result<tla_dsl::Artifact, Error> {
-    tla_dsl::compile_file(path).map_err(|error| Error::Dsl {
+pub fn compile(path: &Path) -> Result<tlaplus_dsl::Artifact, Error> {
+    tlaplus_dsl::compile_file(path).map_err(|error| Error::Dsl {
         path: path.into(),
         error,
     })
@@ -12,7 +12,7 @@ pub fn compile(path: &Path) -> Result<tla_dsl::Artifact, Error> {
 /// Keep the temporary directory alive while the checker loads the exported model.
 pub struct Generated {
     pub path: PathBuf,
-    artifact: tla_dsl::Artifact,
+    artifact: tlaplus_dsl::Artifact,
     _directory: tempfile::TempDir,
 }
 
@@ -37,7 +37,7 @@ pub fn generate(path: &Path) -> Result<Generated, Error> {
 
 impl Generated {
     /// Attach original locations without changing the transition predicates.
-    pub fn annotate(&self, model: &mut tla_checker::BoundModel, source: &Path) {
+    pub fn annotate(&self, model: &mut tlaplus_checker::BoundModel, source: &Path) {
         for (name, _) in &mut model.checks.actions {
             let original = if name == "Next" && self.artifact.actions.len() == 1 {
                 &self.artifact.actions[0]
@@ -72,7 +72,7 @@ pub fn export(source: &Path, directory: &Path) -> Result<(), Error> {
     Ok(())
 }
 
-fn write(artifact: &tla_dsl::Artifact, directory: &Path) -> Result<PathBuf, Error> {
+fn write(artifact: &tlaplus_dsl::Artifact, directory: &Path) -> Result<PathBuf, Error> {
     let path = directory.join(format!("{}.tla", artifact.module));
     let mut created = Vec::new();
     let result = (|| {

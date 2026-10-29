@@ -9,7 +9,7 @@ with Rust installed through rustup, or from the `nix develop` shell:
 ```bash
 git clone https://github.com/drbh/tlaplus-rs.git
 cd tlaplus-rs
-cargo build --release -p tla-cli
+cargo build --release -p tlaplus-cli
 export PATH="$PWD/target/release:$PATH"
 ```
 

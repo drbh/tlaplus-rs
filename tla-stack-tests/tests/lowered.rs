@@ -2,8 +2,8 @@ use std::fs::{self, File};
 use std::io::Read;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
-use tla_bridge::{ModelRequest, with_model};
-use tla_engine::{Options, TransitionSystem, explore, explore_parallel};
+use tlaplus_bridge::{ModelRequest, with_model};
+use tlaplus_engine::{Options, TransitionSystem, explore, explore_parallel};
 
 #[test]
 fn operator_substitution_preserves_assignment_and_let_capture() {
@@ -48,7 +48,7 @@ Inv == /\ Left(x) = x
             .nodes
             .iter()
             .map(|node| {
-                let state = tla_engine::Leveled {
+                let state = tlaplus_engine::Leveled {
                     values: node.state.detached_values()?,
                     depth: node.depth,
                 };
@@ -59,7 +59,7 @@ Inv == /\ Left(x) = x
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok((state, successors))
             })
-            .collect::<Result<Vec<_>, tla_bridge::model::ModelError>>()?;
+            .collect::<Result<Vec<_>, tlaplus_bridge::model::ModelError>>()?;
         Ok((faithful.lower()?, samples))
     })
     .unwrap();
@@ -81,7 +81,7 @@ Inv == /\ Left(x) = x
             NonZeroUsize::new(workers).unwrap(),
         )
         .unwrap();
-        assert_eq!(report.completion, tla_engine::Completion::Complete);
+        assert_eq!(report.completion, tlaplus_engine::Completion::Complete);
         assert_eq!(report.nodes.len(), 2);
     }
 }
@@ -164,7 +164,7 @@ fn temporal_properties_lower_to_ir_without_safety_evaluation() {
             .program
             .nodes
             .iter()
-            .any(|node| matches!(node.expr, tla_ir::Expr::Temporal { .. }))
+            .any(|node| matches!(node.expr, tlaplus_ir::Expr::Temporal { .. }))
     );
 }
 
@@ -203,7 +203,7 @@ fn lowered_recursive_calls_and_except_old_values_evaluate_independently() {
     })
     .unwrap();
     assert_eq!(
-        tla_eval::Evaluator::new(&program, &[], &[], &[])
+        tlaplus_eval::Evaluator::new(&program, &[], &[], &[])
             .evaluate(id)
             .unwrap(),
         expected.unwrap()
@@ -221,7 +221,7 @@ fn multiple_function_domains_and_tuple_binders_preserve_faithful_semantics() {
     })
     .unwrap();
     assert_eq!(
-        tla_eval::Evaluator::new(&program, &[], &[], &[])
+        tlaplus_eval::Evaluator::new(&program, &[], &[], &[])
             .evaluate(id)
             .unwrap(),
         expected.unwrap()
@@ -264,7 +264,7 @@ fn r3_gate_levels_and_atom_ordinals_match_the_faithful_front_end() {
     .unwrap();
     with_model(ModelRequest::new(path), |faithful| {
         let model = faithful.lower()?;
-        use tla_ir::{Expr, Level, Literal};
+        use tlaplus_ir::{Expr, Level, Literal};
         let level = |id: usize| model.program.nodes[id].level;
         assert_eq!(
             model
@@ -299,9 +299,9 @@ fn r3_gate_levels_and_atom_ordinals_match_the_faithful_front_end() {
         ordinals.dedup();
         assert_eq!(ordinals.len(), 3);
         for (ordinal, text, model_value) in ordinals {
-            let expected = tla_bridge::values::intern_value(&text, model_value).unwrap();
+            let expected = tlaplus_bridge::values::intern_value(&text, model_value).unwrap();
             let expected = match expected {
-                tla_model::Value::String(atom) | tla_model::Value::Model(atom) => atom.ordinal,
+                tlaplus_model::Value::String(atom) | tlaplus_model::Value::Model(atom) => atom.ordinal,
                 other => panic!("expected an atom, got {other:?}"),
             };
             assert_eq!(ordinal, expected);
@@ -329,10 +329,10 @@ fn unbounded_choose_overrides_and_multi_binder_functions_lower_and_run() {
         program
             .nodes
             .iter()
-            .any(|node| matches!(node.expr, tla_ir::Expr::Choose { domain: None, .. }))
+            .any(|node| matches!(node.expr, tlaplus_ir::Expr::Choose { domain: None, .. }))
     );
     assert!(
-        tla_eval::Evaluator::new(&program, &[], &[], &[])
+        tlaplus_eval::Evaluator::new(&program, &[], &[], &[])
             .evaluate(id)
             .is_err()
     );
@@ -351,12 +351,12 @@ fn unbounded_choose_overrides_and_multi_binder_functions_lower_and_run() {
     );
 }
 
-fn semantic_levels(model: &tla_model::BoundModel) -> Vec<i32> {
+fn semantic_levels(model: &tlaplus_model::BoundModel) -> Vec<i32> {
     let level = |id: usize| match model.program.nodes[id].level {
-        tla_ir::Level::Constant => 0,
-        tla_ir::Level::State => 1,
-        tla_ir::Level::Action => 2,
-        tla_ir::Level::Temporal => 3,
+        tlaplus_ir::Level::Constant => 0,
+        tlaplus_ir::Level::State => 1,
+        tlaplus_ir::Level::Action => 2,
+        tlaplus_ir::Level::Temporal => 3,
     };
     let mut levels = Vec::new();
     levels.extend(model.checks.init.iter().copied().map(level));
@@ -431,8 +431,8 @@ fn examples_lowering(only: Option<&[&str]>) {
             faithful.check_atom_ordinals(&lowered.program)?;
             let actual = semantic_levels(&lowered);
             if actual != expected {
-                return Err(tla_bridge::model::ModelError {
-                    stage: tla_bridge::model::Stage::Load,
+                return Err(tlaplus_bridge::model::ModelError {
+                    stage: tlaplus_bridge::model::Stage::Load,
                     code: None,
                     message: format!("levels {actual:?} != {expected:?}"),
                 });
@@ -495,12 +495,12 @@ fn recursive_function_captures_are_scoped_to_each_let_instance() {
         faithful.constant_expression("Check")
     })
     .unwrap();
-    let actual = tla_eval::Evaluator::new(&program, &[], &[], &[])
+    let actual = tlaplus_eval::Evaluator::new(&program, &[], &[], &[])
         .evaluate(id)
         .unwrap();
     assert_eq!(actual, expected.unwrap());
     assert_eq!(
         actual,
-        tla_model::Value::tuple(vec![tla_model::Value::Int(3), tla_model::Value::Int(30)])
+        tlaplus_model::Value::tuple(vec![tlaplus_model::Value::Int(3), tlaplus_model::Value::Int(30)])
     );
 }

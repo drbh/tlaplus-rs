@@ -1,6 +1,6 @@
 use crate::Random;
-use tla_value_expr::Expr;
-use tla_values::{Error, Value};
+use tlaplus_value_expr::Expr;
+use tlaplus_values::{Error, Value};
 
 impl Random {
     /// Draws for `RandomElement`, `RandomSubset` or `RandomSetOfSubsets`, selected

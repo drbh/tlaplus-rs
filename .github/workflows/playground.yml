@@ -32,7 +32,7 @@ jobs:
       - name: Prepare the standalone checker workspace
         run: python3 playground/tools/prepare-workspace.py
       - name: Test the native checker
-        run: cargo test --manifest-path playground/.cache/browser-workspace/Cargo.toml --locked -p tla-playground -p tla-checker
+        run: cargo test --manifest-path playground/.cache/browser-workspace/Cargo.toml --locked -p tlaplus-playground -p tlaplus-checker
         env:
           CARGO_TARGET_DIR: ${{ github.workspace }}/target
       - name: Build the browser checker and site

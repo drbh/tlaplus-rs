@@ -1,15 +1,15 @@
 use std::{collections::BTreeSet, sync::Arc};
-use tla_bridge::ModelRequest;
-use tla_bridge::values::ValueKey;
-use tla_conformance::Request;
-use tla_disk::{Codec, StateCodec};
-use tla_engine::Options;
-use tla_model::BoundModel;
-use tla_values::Value;
+use tlaplus_bridge::ModelRequest;
+use tlaplus_bridge::values::ValueKey;
+use tlaplus_conformance::Request;
+use tlaplus_disk::{Codec, StateCodec};
+use tlaplus_engine::Options;
+use tlaplus_model::BoundModel;
+use tlaplus_values::Value;
 
-pub type SharedValues = tla_conformance::snapshots::SharedValues<ValueKey>;
-pub type Samples = tla_conformance::snapshots::Samples<ValueKey>;
-pub use tla_conformance::snapshots::intern_values;
+pub type SharedValues = tlaplus_conformance::snapshots::SharedValues<ValueKey>;
+pub type Samples = tlaplus_conformance::snapshots::Samples<ValueKey>;
+pub use tlaplus_conformance::snapshots::intern_values;
 
 pub fn write_json(
     path: &std::path::Path,
@@ -23,7 +23,7 @@ pub fn write_json(
 }
 
 pub fn replay(model: &BoundModel, samples: &Samples) -> Result<bool, String> {
-    use tla_engine::TransitionSystem;
+    use tlaplus_engine::TransitionSystem;
     for (bytes, expected) in samples {
         let state = StateCodec.decode(bytes).map_err(|e| e.to_string())?;
         let actual = model
@@ -39,18 +39,18 @@ pub fn replay(model: &BoundModel, samples: &Samples) -> Result<bool, String> {
     Ok(true)
 }
 
-pub fn trace_length<S>(report: &tla_engine::Report<S>) -> Option<usize> {
+pub fn trace_length<S>(report: &tlaplus_engine::Report<S>) -> Option<usize> {
     match &report.completion {
-        tla_engine::Completion::Violated(violation) => Some(violation.trace.states.len()),
+        tlaplus_engine::Completion::Violated(violation) => Some(violation.trace.states.len()),
         _ => None,
     }
 }
 /// Continued violations are compared as a set of kinds with minimal trace lengths.
-pub fn outcome<S>(report: &tla_engine::Report<S>) -> String {
+pub fn outcome<S>(report: &tlaplus_engine::Report<S>) -> String {
     let mut outcome = match &report.completion {
-        tla_engine::Completion::Complete => "success".into(),
-        tla_engine::Completion::StateLimit => "state limit".into(),
-        tla_engine::Completion::Violated(violation) => format!("{:?}", violation.kind),
+        tlaplus_engine::Completion::Complete => "success".into(),
+        tlaplus_engine::Completion::StateLimit => "state limit".into(),
+        tlaplus_engine::Completion::Violated(violation) => format!("{:?}", violation.kind),
     };
     let continued: BTreeSet<_> = report
         .violations
@@ -63,8 +63,8 @@ pub fn outcome<S>(report: &tla_engine::Report<S>) -> String {
     outcome
 }
 
-pub fn answers(outcome: &str, initial: usize, states: usize, depth: usize) -> tla_bridge::Answers {
-    use tla_bridge::Outcome;
+pub fn answers(outcome: &str, initial: usize, states: usize, depth: usize) -> tlaplus_bridge::Answers {
+    use tlaplus_bridge::Outcome;
     let outcome = match outcome {
         "success" => Outcome::Success,
         "Deadlock" => Outcome::Deadlock,
@@ -73,8 +73,8 @@ pub fn answers(outcome: &str, initial: usize, states: usize, depth: usize) -> tl
         v if v.starts_with("ActionProperty(") => Outcome::ActionPropertyViolated,
         _ => Outcome::Unknown,
     };
-    tla_bridge::Answers {
-        mode: tla_bridge::Mode::Bfs,
+    tlaplus_bridge::Answers {
+        mode: tlaplus_bridge::Mode::Bfs,
         outcome,
         initial_distinct: Some(initial as u64),
         distinct: Some(states as u64),
@@ -83,18 +83,18 @@ pub fn answers(outcome: &str, initial: usize, states: usize, depth: usize) -> tl
 }
 
 pub fn compare_recorded(
-    actual: tla_bridge::corpus::Corpus,
+    actual: tlaplus_bridge::corpus::Corpus,
     recordings: &std::path::Path,
     output: &std::path::Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
     if actual.answers.is_empty() {
         return Err("no pipeline evidence".into());
     }
-    let mut expected = tla_bridge::corpus::Corpus::read(recordings)?;
+    let mut expected = tlaplus_bridge::corpus::Corpus::read(recordings)?;
     expected
         .answers
         .retain(|id, _| actual.answers.contains_key(id));
-    let report = tla_bridge::corpus::compare_corpora(&expected, &actual);
+    let report = tlaplus_bridge::corpus::compare_corpora(&expected, &actual);
     std::fs::write(output, serde_json::to_vec_pretty(&report)?)?;
     if !report.is_match() {
         return Err("recorded safety answers differ or are inconclusive".into());
@@ -103,10 +103,10 @@ pub fn compare_recorded(
 }
 
 pub fn configuration(request: &Request) -> Result<(ModelRequest, Options), String> {
-    let parsed = tla_bridge::FaithfulArgs::parse(&request.args).map_err(|e| e.0)?;
+    let parsed = tlaplus_bridge::FaithfulArgs::parse(&request.args).map_err(|e| e.0)?;
     let dfid_as_bfs = std::env::var_os("REWRITE_DFID_AS_BFS").is_some();
     if (parsed.dfid.is_some() && !dfid_as_bfs)
-        || !matches!(parsed.run_mode, tla_bridge::FaithfulRunMode::ModelCheck)
+        || !matches!(parsed.run_mode, tlaplus_bridge::FaithfulRunMode::ModelCheck)
         || !request.system_properties.is_empty()
     {
         return Err("unsupported run mode/options".into());
@@ -388,19 +388,19 @@ mod tests {
                 .unwrap();
         let (model, _) = configuration(&input).unwrap();
         assert!(model.library_paths.is_empty());
-        let error = tla_bridge::with_loaded_model(model, |_| Ok(())).unwrap_err();
-        assert_eq!(error.code, Some(tla_bridge::recording::TLC_PARSING_FAILED));
+        let error = tlaplus_bridge::with_loaded_model(model, |_| Ok(())).unwrap_err();
+        assert_eq!(error.code, Some(tlaplus_bridge::recording::TLC_PARSING_FAILED));
         input.library_paths.push(
             std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("../../tlaplus-rs-explore/crates/tla-tlc-eval/community_modules"),
         );
         let (model, _) = configuration(&input).unwrap();
-        tla_bridge::with_loaded_model(model, |_| Ok(())).unwrap();
+        tlaplus_bridge::with_loaded_model(model, |_| Ok(())).unwrap();
     }
 
     #[test]
     fn recorded_projection_preserves_complete_counts_and_unknown_outcomes() {
-        use tla_bridge::{Comparison, compare};
+        use tlaplus_bridge::{Comparison, compare};
         assert_ne!(
             compare(&answers("success", 1, 3, 3), &answers("success", 1, 4, 3)),
             Comparison::Match

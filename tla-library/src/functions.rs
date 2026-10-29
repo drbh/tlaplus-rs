@@ -1,9 +1,9 @@
 //! Functions and records: application, domains, construction and the
 //! function-set enumeration `[S -> T]`.
 use crate::{Error, anti_function, sequences::sequence};
-use tla_ir::Builtin;
-use tla_value_expr::Expr;
-use tla_values::Value;
+use tlaplus_ir::Builtin;
+use tlaplus_value_expr::Expr;
+use tlaplus_values::Value;
 
 pub(crate) fn apply(op: Builtin, args: &[Value]) -> Result<Value, Error> {
     use Builtin::*;

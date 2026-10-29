@@ -1,6 +1,6 @@
 //! The `Bags` module: multisets as functions into positive counts.
-use tla_ir::Builtin;
-use tla_values::{Error, Value};
+use tlaplus_ir::Builtin;
+use tlaplus_values::{Error, Value};
 
 /// The `Bags` operator a builtin stands for.
 pub(crate) fn op(builtin: Builtin) -> BagOp {

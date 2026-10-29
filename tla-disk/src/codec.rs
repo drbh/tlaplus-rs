@@ -1,6 +1,6 @@
 use crate::Codec;
 use std::fmt;
-use tla_values::Value;
+use tlaplus_values::Value;
 
 /// Why bytes could not be encoded or decoded.
 #[derive(Debug)]
@@ -14,7 +14,7 @@ pub enum CodecError {
     InvalidHeader,
     ZeroDepth,
     Utf8(std::str::Utf8Error),
-    Value(tla_values::Error),
+    Value(tlaplus_values::Error),
     /// A reason from a codec outside this crate.
     Other(String),
 }
@@ -39,8 +39,8 @@ impl fmt::Display for CodecError {
 
 impl std::error::Error for CodecError {}
 
-impl From<tla_values::Error> for CodecError {
-    fn from(e: tla_values::Error) -> Self {
+impl From<tlaplus_values::Error> for CodecError {
+    fn from(e: tlaplus_values::Error) -> Self {
         Self::Value(e)
     }
 }
@@ -180,8 +180,8 @@ impl<'a> Input<'a> {
 }
 
 pub struct StateCodec;
-impl Codec<tla_engine::Leveled<Vec<Value>>, Vec<Value>> for StateCodec {
-    fn state(&self, state: &tla_engine::Leveled<Vec<Value>>) -> Result<Vec<u8>, CodecError> {
+impl Codec<tlaplus_engine::Leveled<Vec<Value>>, Vec<Value>> for StateCodec {
+    fn state(&self, state: &tlaplus_engine::Leveled<Vec<Value>>) -> Result<Vec<u8>, CodecError> {
         if state.depth == 0 {
             return Err(CodecError::ZeroDepth);
         }
@@ -197,7 +197,7 @@ impl Codec<tla_engine::Leveled<Vec<Value>>, Vec<Value>> for StateCodec {
     fn key(&self, key: &Vec<Value>) -> Result<Vec<u8>, CodecError> {
         ValueCodec.key(key)
     }
-    fn decode(&self, bytes: &[u8]) -> Result<tla_engine::Leveled<Vec<Value>>, CodecError> {
+    fn decode(&self, bytes: &[u8]) -> Result<tlaplus_engine::Leveled<Vec<Value>>, CodecError> {
         if bytes.len() < 12 || &bytes[..4] != b"TLS1" {
             return Err(CodecError::InvalidHeader);
         }
@@ -206,7 +206,7 @@ impl Codec<tla_engine::Leveled<Vec<Value>>, Vec<Value>> for StateCodec {
         if depth == 0 {
             return Err(CodecError::ZeroDepth);
         }
-        Ok(tla_engine::Leveled {
+        Ok(tlaplus_engine::Leveled {
             values: ValueCodec.decode(&bytes[12..])?,
             depth,
         })

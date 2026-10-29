@@ -7,7 +7,7 @@ mod codec;
 pub use codec::{CodecError, StateCodec, ValueCodec};
 use std::{fmt, time::Instant};
 use store::Node;
-use tla_engine::{
+use tlaplus_engine::{
     Completion, Options, Statistics, Trace, TransitionSystem, Violation, ViolationKind,
 };
 

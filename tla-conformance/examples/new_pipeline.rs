@@ -2,13 +2,13 @@ pub mod support;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeSet, fs, num::NonZeroUsize, time::Duration};
 use support::{Samples, configuration, intern_values, key, outcome, replay, trace_length};
-use tla_bridge::{values::ValueKey, with_register_model as with_model};
-use tla_conformance::{Case, Execution, Request, execute_suite};
-use tla_disk::{Codec, StateCodec};
-use tla_engine::{
+use tlaplus_bridge::{values::ValueKey, with_register_model as with_model};
+use tlaplus_conformance::{Case, Execution, Request, execute_suite};
+use tlaplus_disk::{Codec, StateCodec};
+use tlaplus_engine::{
     Completion, Options, Report, TransitionSystem, explore, explore_parallel, validate_trace,
 };
-use tla_model::{BoundModel, State};
+use tlaplus_model::{BoundModel, State};
 
 #[derive(Debug, Deserialize, Serialize)]
 struct Snapshots {
@@ -16,8 +16,8 @@ struct Snapshots {
     strings: std::collections::BTreeMap<String, u32>,
     request: Request,
     #[serde(
-        serialize_with = "tla_conformance::snapshots::serialize",
-        deserialize_with = "tla_conformance::snapshots::deserialize"
+        serialize_with = "tlaplus_conformance::snapshots::serialize",
+        deserialize_with = "tlaplus_conformance::snapshots::deserialize"
     )]
     samples: Samples,
 }
@@ -68,13 +68,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     Execution::Completed(m) if m.matches() => {
                         support::answers(&m.outcome, m.initial, m.states, m.depth)
                     }
-                    _ => tla_bridge::Answers::default(),
+                    _ => tlaplus_bridge::Answers::default(),
                 };
                 (id, answer)
             })
             .collect();
         return support::compare_recorded(
-            tla_bridge::corpus::Corpus { answers },
+            tlaplus_bridge::corpus::Corpus { answers },
             args[2].as_ref(),
             args[3].as_ref(),
         );
@@ -213,12 +213,12 @@ fn measure(request: Request) -> Result<Measurement, String> {
                 })
                 .collect::<Result<BTreeSet<_>, _>>()?;
             let bytes = StateCodec
-                .state(&tla_engine::Leveled {
+                .state(&tlaplus_engine::Leveled {
                     values: node.state.detached_values()?,
                     depth: node.depth,
                 })
-                .map_err(|error| tla_bridge::model::ModelError {
-                    stage: tla_bridge::model::Stage::InspectState,
+                .map_err(|error| tlaplus_bridge::model::ModelError {
+                    stage: tlaplus_bridge::model::Stage::InspectState,
                     code: None,
                     message: error.to_string(),
                 })?;
@@ -344,7 +344,7 @@ fn keys(model: &BoundModel, report: &Report<State>) -> Result<BTreeSet<Vec<Value
 mod tests {
     use super::*;
     use std::path::PathBuf;
-    use tla_bridge::ModelRequest;
+    use tlaplus_bridge::ModelRequest;
 
     fn measurement(outcome: &str) -> Measurement {
         Measurement {
@@ -436,8 +436,8 @@ mod tests {
         );
         let mut trace = report.trace_to(3);
         trace.states.last_mut().unwrap().depth = 1;
-        let violation = tla_engine::Violation {
-            kind: tla_engine::ViolationKind::Invariant("Inv".into()),
+        let violation = tlaplus_engine::Violation {
+            kind: tlaplus_engine::ViolationKind::Invariant("Inv".into()),
             trace,
         };
         assert!(!validate_trace(&model, &violation).unwrap());

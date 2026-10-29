@@ -14,7 +14,7 @@ if [[ -z "${WASI_SDK_PATH:-}" ]]; then
 fi
 python3 tools/prepare-workspace.py
 export CARGO_TARGET_DIR="$PWD/../target"
-cargo build --manifest-path .cache/browser-workspace/Cargo.toml --locked --release -p tla-playground --target wasm32-wasip1
+cargo build --manifest-path .cache/browser-workspace/Cargo.toml --locked --release -p tlaplus-playground --target wasm32-wasip1
 mkdir -p public
 cp ../target/wasm32-wasip1/release/tla-playground.wasm public/checker.wasm
 VITE_BROWSER_CHECKER=1 npm run build

@@ -5,9 +5,9 @@
 mod calls;
 mod expressions;
 use std::collections::BTreeMap;
-use tla_ir::{Builtin as B, Expr as I, ExprId, Level, Literal, Operator, Program};
-use tla_modules::{Config, Error};
-use tla_syntax::{Expr, Module};
+use tlaplus_ir::{Builtin as B, Expr as I, ExprId, Level, Literal, Operator, Program};
+use tlaplus_modules::{Config, Error};
+use tlaplus_syntax::{Expr, Module};
 
 pub struct Lowered {
     pub program: Program,
@@ -30,7 +30,7 @@ enum Status {
 }
 
 struct Scope {
-    definitions: BTreeMap<String, tla_syntax::Definition>,
+    definitions: BTreeMap<String, tlaplus_syntax::Definition>,
     locals: Env,
 }
 

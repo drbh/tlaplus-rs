@@ -4,7 +4,7 @@ use std::{
     hash::{BuildHasherDefault, Hasher},
     sync::Arc,
 };
-use tla_conformance::snapshots::{Samples, intern_values};
+use tlaplus_conformance::snapshots::{Samples, intern_values};
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 enum Value {
@@ -15,8 +15,8 @@ enum Value {
 #[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
 struct Snapshot {
     #[serde(
-        serialize_with = "tla_conformance::snapshots::serialize",
-        deserialize_with = "tla_conformance::snapshots::deserialize"
+        serialize_with = "tlaplus_conformance::snapshots::serialize",
+        deserialize_with = "tlaplus_conformance::snapshots::deserialize"
     )]
     samples: Samples<Value>,
 }

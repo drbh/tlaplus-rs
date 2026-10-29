@@ -11,15 +11,15 @@ use std::{
     num::NonZeroUsize,
     path::{Path, PathBuf},
 };
-use tla_engine::{Options, explore, explore_parallel, validate_trace};
-use tla_ir::{ExprId, Level, Program};
-use tla_lower::Lowered;
-use tla_modules::{Config, temporal::Temporal};
-use tla_observe::Timeline;
-use tla_temporal::Instantiated;
+use tlaplus_engine::{Options, explore, explore_parallel, validate_trace};
+use tlaplus_ir::{ExprId, Level, Program};
+use tlaplus_lower::Lowered;
+use tlaplus_modules::{Config, temporal::Temporal};
+use tlaplus_observe::Timeline;
+use tlaplus_temporal::Instantiated;
 
-pub use tla_engine::{Completion, Violation, ViolationKind};
-pub use tla_model::{BoundModel, State, Value};
+pub use tlaplus_engine::{Completion, Violation, ViolationKind};
+pub use tlaplus_model::{BoundModel, State, Value};
 
 /// Why checking stopped, by the phase that failed.
 #[derive(Debug)]
@@ -32,20 +32,20 @@ pub enum Error {
         error: std::io::Error,
     },
     /// Loading, configuring or lowering the specification failed.
-    Load(tla_modules::Error),
+    Load(tlaplus_modules::Error),
     /// The configuration names something the specification lacks, or uses it
     /// at the wrong level.
     Configuration(String),
     /// A feature this checker does not implement.
     Unsupported(&'static str),
     /// Evaluating or exploring the model failed.
-    Evaluation(tla_model::Error),
+    Evaluation(tlaplus_model::Error),
     /// A reported counterexample does not replay on the model.
     InvalidCounterexample,
     /// Instantiating or checking a temporal property failed.
-    Liveness(tla_temporal::Error),
+    Liveness(tlaplus_temporal::Error),
     /// Disk-backed exploration failed to store or read a state.
-    Storage(tla_disk::Error<tla_model::Error>),
+    Storage(tlaplus_disk::Error<tlaplus_model::Error>),
 }
 
 impl fmt::Display for Error {
@@ -65,26 +65,26 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-impl From<tla_modules::Error> for Error {
-    fn from(e: tla_modules::Error) -> Self {
+impl From<tlaplus_modules::Error> for Error {
+    fn from(e: tlaplus_modules::Error) -> Self {
         Self::Load(e)
     }
 }
 
-impl From<tla_model::Error> for Error {
-    fn from(e: tla_model::Error) -> Self {
+impl From<tlaplus_model::Error> for Error {
+    fn from(e: tlaplus_model::Error) -> Self {
         Self::Evaluation(e)
     }
 }
 
-impl From<tla_temporal::Error> for Error {
-    fn from(e: tla_temporal::Error) -> Self {
+impl From<tlaplus_temporal::Error> for Error {
+    fn from(e: tlaplus_temporal::Error) -> Self {
         Self::Liveness(e)
     }
 }
 
-impl From<tla_disk::Error<tla_model::Error>> for Error {
-    fn from(e: tla_disk::Error<tla_model::Error>) -> Self {
+impl From<tlaplus_disk::Error<tlaplus_model::Error>> for Error {
+    fn from(e: tlaplus_disk::Error<tlaplus_model::Error>) -> Self {
         Self::Storage(e)
     }
 }
@@ -102,15 +102,15 @@ fn stage<T>(timeline: Option<&Timeline>, name: &'static str, operation: impl FnO
 
 /// Parses a module without loading its imports.
 pub fn check_syntax(text: &str) -> Result<(), Error> {
-    tla_parser::parse(text)
+    tlaplus_parser::parse(text)
         .map(drop)
         .map_err(|e| Error::Syntax(e.to_string()))
 }
 
 /// Loads and lowers a module with an empty configuration.
 pub fn check_module(path: &Path) -> Result<(), Error> {
-    let source = tla_modules::load(path, &[])?;
-    tla_lower::lower(&source, &Config::default())?;
+    let source = tlaplus_modules::load(path, &[])?;
+    tlaplus_lower::lower(&source, &Config::default())?;
     Ok(())
 }
 
@@ -136,7 +136,7 @@ pub fn load(
     let sibling = spec.with_extension("cfg");
     let embedded = !sibling.exists()
         && std::fs::read_to_string(spec)
-            .is_ok_and(|text| !tla_modules::embedded_config(&text).trim().is_empty());
+            .is_ok_and(|text| !tlaplus_modules::embedded_config(&text).trim().is_empty());
     let config_path = match config {
         Some(path) => path.to_path_buf(),
         None if embedded => spec.to_path_buf(),
@@ -147,13 +147,13 @@ pub fn load(
         error,
     })?;
     if config_path.extension().is_some_and(|ext| ext == "tla") {
-        text = tla_modules::embedded_config(&text);
+        text = tlaplus_modules::embedded_config(&text);
     }
-    let mut config = tla_modules::config(&text)?;
-    let mut source = stage(timeline, "load", || tla_modules::load(spec, libraries))?;
-    tla_modules::override_operators(&mut source, &mut config)?;
-    let temporal = tla_modules::temporal::prepare(&mut source, &mut config)?;
-    let lowered = stage(timeline, "lower", || tla_lower::lower(&source, &config))?;
+    let mut config = tlaplus_modules::config(&text)?;
+    let mut source = stage(timeline, "load", || tlaplus_modules::load(spec, libraries))?;
+    tlaplus_modules::override_operators(&mut source, &mut config)?;
+    let temporal = tlaplus_modules::temporal::prepare(&mut source, &mut config)?;
+    let lowered = stage(timeline, "lower", || tlaplus_lower::lower(&source, &config))?;
     if config.specification.is_some() {
         return Err(Error::Unsupported(
             "SPECIFICATION temporal decomposition is not implemented; use INIT/NEXT",
@@ -258,10 +258,10 @@ fn configure_symmetry(model: &mut BoundModel, id: ExprId) -> Result<(), Error> {
     require_level(model, id, Level::Constant, "SYMMETRY")?;
     let permutations = model.evaluate(id, &[], &[])?;
     let mut generators = Vec::new();
-    for permutation in permutations.elements().map_err(tla_model::Error::from)? {
+    for permutation in permutations.elements().map_err(tlaplus_model::Error::from)? {
         let entries = permutation
             .entries()
-            .map_err(tla_model::Error::from)?
+            .map_err(tlaplus_model::Error::from)?
             .to_vec();
         let domain = entries.iter().map(|(key, _)| key).collect::<Vec<_>>();
         if domain.iter().any(|key| !matches!(key, Value::Model(_)))
@@ -454,7 +454,7 @@ pub fn bind(loaded: Loaded, settings: Settings) -> Result<Bound, Error> {
     model.checks.action_constraints = action_constraints;
     model.checks.view = view;
     classify_properties(&mut model, initial_properties)?;
-    let live = tla_temporal::instantiate(&mut model, &temporal)?;
+    let live = tlaplus_temporal::instantiate(&mut model, &temporal)?;
     model.checks.check_deadlock = settings.check_deadlock && config.check_deadlock.unwrap_or(true);
     Ok(Bound::Ready(Box::new(Checker {
         model,
@@ -501,8 +501,8 @@ pub struct Outcome {
 
 /// The explored prefix, including which states were fully expanded.
 pub struct ExplorationGraph {
-    pub nodes: Vec<tla_engine::Node<State>>,
-    pub edges: Vec<tla_engine::Edge>,
+    pub nodes: Vec<tlaplus_engine::Node<State>>,
+    pub edges: Vec<tlaplus_engine::Edge>,
 }
 
 impl Checker {
@@ -634,17 +634,17 @@ impl Checker {
                 "disk exploration does not support --continue",
             ));
         }
-        let store = tla_disk::Store::open(&disk.path, disk.cache_bytes)
-            .map_err(tla_disk::Error::<tla_model::Error>::from)?;
+        let store = tlaplus_disk::Store::open(&disk.path, disk.cache_bytes)
+            .map_err(tlaplus_disk::Error::<tlaplus_model::Error>::from)?;
         let report = if let Some(timeline) = timeline {
-            tla_disk::explore(
+            tlaplus_disk::explore(
                 &timeline.measured(&self.model),
-                &tla_disk::StateCodec,
+                &tlaplus_disk::StateCodec,
                 &store,
                 options,
             )
         } else {
-            tla_disk::explore(&self.model, &tla_disk::StateCodec, &store, options)
+            tlaplus_disk::explore(&self.model, &tlaplus_disk::StateCodec, &store, options)
         }?;
         if let Completion::Violated(violation) = &report.completion {
             self.validate(violation)?;
@@ -677,9 +677,9 @@ fn explore_with<T>(
     system: &T,
     options: &Options,
     workers: NonZeroUsize,
-) -> Result<tla_engine::Report<T::State>, T::Error>
+) -> Result<tlaplus_engine::Report<T::State>, T::Error>
 where
-    T: tla_engine::TransitionSystem + Sync,
+    T: tlaplus_engine::TransitionSystem + Sync,
     T::State: Send + Sync,
     T::Error: Send,
     T::Key: Send + Sync,

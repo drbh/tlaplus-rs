@@ -1,6 +1,6 @@
-use tla_bridge::values::intern_value;
-use tla_value_expr::{Expr as Runtime, FunctionKind, InfiniteSet, SetOp};
-use tla_values::{Atom, Error, Value};
+use tlaplus_bridge::values::intern_value;
+use tlaplus_value_expr::{Expr as Runtime, FunctionKind, InfiniteSet, SetOp};
+use tlaplus_values::{Atom, Error, Value};
 #[derive(Debug)]
 pub enum Expr {
     Atom(String),

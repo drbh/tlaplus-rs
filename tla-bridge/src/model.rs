@@ -8,11 +8,11 @@ use tla_tlc_eval::nextstate::{InitVec, NextVec};
 use tla_tlc_eval::{ProcessedSpec, SetupOptions, TlcState, Tool, mp};
 use tla_tlc_value::TlcError;
 
-pub use tla_oracle::{ModelError, Stage, StateSnapshot};
+pub use tlaplus_oracle::{ModelError, Stage, StateSnapshot};
 
 type Result<T> = std::result::Result<T, ModelError>;
 
-pub use tla_oracle::{ActionId, ActionInfo, ModelInfo};
+pub use tlaplus_oracle::{ActionId, ActionInfo, ModelInfo};
 
 pub struct Model {
     pub(crate) initial_context: RefCell<tla_tlc_eval::tool::RuntimeSnapshot>,
@@ -139,7 +139,7 @@ fn with_context<T: Send + 'static>(
 /// Setup inspection before ASSUME checking, for differential validation only.
 /// The caller must validate assumptions before exploring this model.
 /// ```compile_fail
-/// tla_bridge::with_loaded_model(tla_bridge::ModelRequest::new("Counter.tla"),
+/// tlaplus_bridge::with_loaded_model(tlaplus_bridge::ModelRequest::new("Counter.tla"),
 ///     |model| model.initial_states());
 /// ```
 pub fn with_loaded_model<T: Send + 'static>(
@@ -365,7 +365,7 @@ impl Model {
 }
 
 impl State<'_> {
-    pub fn detached_values(&self) -> Result<Vec<tla_values::Value>> {
+    pub fn detached_values(&self) -> Result<Vec<tlaplus_values::Value>> {
         self.raw
             .values()
             .iter()
@@ -403,15 +403,15 @@ impl State<'_> {
 }
 
 impl Model {
-    pub(crate) fn lowered_program(&self) -> tla_ir::Program {
-        tla_ir::Program {
+    pub(crate) fn lowered_program(&self) -> tlaplus_ir::Program {
+        tlaplus_ir::Program {
             fingerprint_polynomial: Some(tla_tlc_value::fp64::irred_poly() as u64),
             variables: self.info().variables.clone(),
             strings: tla_tlc_value::ustring::snapshot()
                 .into_iter()
                 .map(|s| (s.as_str().to_owned(), s.tok() as u32))
                 .collect(),
-            ..tla_ir::Program::default()
+            ..tlaplus_ir::Program::default()
         }
     }
     /// Semantic levels of every formula [`crate::Model::lower`] returns, in that order.
@@ -440,15 +440,15 @@ impl Model {
     }
 
     /// String and model-value ordinals must be the faithful intern table's.
-    pub fn check_atom_ordinals(&self, program: &tla_ir::Program) -> Result<()> {
-        fn walk(literal: &tla_ir::Literal) -> Result<()> {
+    pub fn check_atom_ordinals(&self, program: &tlaplus_ir::Program) -> Result<()> {
+        fn walk(literal: &tlaplus_ir::Literal) -> Result<()> {
             match literal {
-                tla_ir::Literal::String { ordinal, text } => atom(text, *ordinal, false),
-                tla_ir::Literal::Model { ordinal, text } => atom(text, *ordinal, true),
-                tla_ir::Literal::Set(values) | tla_ir::Literal::Tuple(values) => {
+                tlaplus_ir::Literal::String { ordinal, text } => atom(text, *ordinal, false),
+                tlaplus_ir::Literal::Model { ordinal, text } => atom(text, *ordinal, true),
+                tlaplus_ir::Literal::Set(values) | tlaplus_ir::Literal::Tuple(values) => {
                     values.iter().try_for_each(walk)
                 }
-                tla_ir::Literal::Function(entries) => entries.iter().try_for_each(|(k, v)| {
+                tlaplus_ir::Literal::Function(entries) => entries.iter().try_for_each(|(k, v)| {
                     walk(k)?;
                     walk(v)
                 }),
@@ -459,7 +459,7 @@ impl Model {
             let value = crate::values::intern_value(text, model)
                 .map_err(|e| ModelError::message(Stage::Load, e))?;
             let expected = match &value {
-                tla_values::Value::String(atom) | tla_values::Value::Model(atom) => atom.ordinal,
+                tlaplus_values::Value::String(atom) | tlaplus_values::Value::Model(atom) => atom.ordinal,
                 _ => return Err(ModelError::message(Stage::Load, "expected an atom")),
             };
             if expected != ordinal {
@@ -471,7 +471,7 @@ impl Model {
             Ok(())
         }
         for node in &program.nodes {
-            if let tla_ir::Expr::Literal(literal) = &node.expr {
+            if let tlaplus_ir::Expr::Literal(literal) = &node.expr {
                 walk(literal)?;
             }
         }
@@ -480,7 +480,7 @@ impl Model {
 }
 
 impl Model {
-    pub(crate) fn seed_context(&self, model: &mut tla_model::BoundModel) -> Result<()> {
+    pub(crate) fn seed_context(&self, model: &mut tlaplus_model::BoundModel) -> Result<()> {
         model
             .set_random_seed(
                 tla_tlc_value::random::get_seed(),

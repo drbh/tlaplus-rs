@@ -6,7 +6,7 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
-use tla_bridge::{Mode, Outcome, RunEnv, observe_faithful};
+use tlaplus_bridge::{Mode, Outcome, RunEnv, observe_faithful};
 
 #[derive(Serialize)]
 struct Case {
@@ -14,8 +14,8 @@ struct Case {
     seed: u64,
     workers: usize,
     matched: bool,
-    expected: tla_bridge::Answers,
-    faithful: tla_bridge::ObservedRun,
+    expected: tlaplus_bridge::Answers,
+    faithful: tlaplus_bridge::ObservedRun,
     exit: Option<i32>,
     output: String,
     diagnostic: String,

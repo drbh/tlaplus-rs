@@ -1,18 +1,22 @@
 [package]
-name = "tla-checker"
+name = "tlaplus-checker"
 version.workspace = true
 edition.workspace = true
-publish.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "../README.md"
+keywords = ["tla", "tlaplus", "model-checker", "formal-methods"]
+categories = ["development-tools", "science"]
 description = "The model checker as a library: load, bind, explore and check a specification."
 
 [dependencies]
-tla-modules = { path = "../tla-modules" }
-tla-parser = { path = "../tla-parser" }
-tla-lower = { path = "../tla-lower" }
-tla-ir = { path = "../tla-ir" }
-tla-model = { path = "../tla-model" }
-tla-engine = { path = "../tla-engine" }
-tla-temporal = { path = "../tla-temporal" }
-tla-props = { path = "../tla-props" }
-tla-disk = { path = "../tla-disk" }
-tla-observe = { path = "../tla-observe" }
+tlaplus-modules = { path = "../tla-modules", version = "0.1.0" }
+tlaplus-parser = { path = "../tla-parser", version = "0.1.0" }
+tlaplus-lower = { path = "../tla-lower", version = "0.1.0" }
+tlaplus-ir = { path = "../tla-ir", version = "0.1.0" }
+tlaplus-model = { path = "../tla-model", version = "0.1.0" }
+tlaplus-engine = { path = "../tla-engine", version = "0.1.0" }
+tlaplus-temporal = { path = "../tla-temporal", version = "0.1.0" }
+tlaplus-props = { path = "../tla-props", version = "0.1.0" }
+tlaplus-disk = { path = "../tla-disk", version = "0.1.0" }
+tlaplus-observe = { path = "../tla-observe", version = "0.1.0" }

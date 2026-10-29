@@ -1,16 +1,21 @@
 [package]
-name = "tla-cli"
+name = "tlaplus-cli"
 version.workspace = true
 edition.workspace = true
-publish.workspace = true
+description = "A TLA+ model checker that gives the same answers as TLC"
+license.workspace = true
+repository.workspace = true
+readme = "../README.md"
+keywords = ["tla", "tlaplus", "model-checker", "formal-methods", "tlc"]
+categories = ["development-tools", "science"]
 
 [[bin]]
 name = "tla"
 path = "src/main.rs"
 
 [dependencies]
-tla-dsl = { path = "../tla-dsl" }
+tlaplus-dsl = { path = "../tla-dsl", version = "0.1.0" }
 tempfile = "3"
-tla-checker = { path = "../tla-checker" }
-tla-observe = { path = "../tla-observe" }
-tla-value-expr = { path = "../tla-value-expr" }
+tlaplus-checker = { path = "../tla-checker", version = "0.1.0" }
+tlaplus-observe = { path = "../tla-observe", version = "0.1.0" }
+tlaplus-value-expr = { path = "../tla-value-expr", version = "0.1.0" }

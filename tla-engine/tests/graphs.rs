@@ -3,7 +3,7 @@ use std::hash::{Hash, Hasher};
 use std::num::NonZeroUsize;
 use std::sync::Barrier;
 
-use tla_engine::{
+use tlaplus_engine::{
     Completion, Options, Transition, TransitionSystem, ViolationKind, explore, explore_parallel,
     validate_trace,
 };
@@ -417,9 +417,9 @@ fn streaming_witness_replay_is_bounded_and_rejects_forged_traces() {
     };
     assert!(validate_trace(&graph, &deadlock).unwrap());
     graph.fail = Some(1);
-    let forged = tla_engine::Violation {
+    let forged = tlaplus_engine::Violation {
         kind: ViolationKind::Invariant("Safe".into()),
-        trace: tla_engine::Trace {
+        trace: tlaplus_engine::Trace {
             states: vec![0, 1],
             actions: vec![0],
         },

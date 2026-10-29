@@ -1,5 +1,5 @@
 use std::{fmt, num::NonZeroUsize, ops::ControlFlow};
-use tla_engine::{Transition, TransitionSystem};
+use tlaplus_engine::{Transition, TransitionSystem};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Phase {

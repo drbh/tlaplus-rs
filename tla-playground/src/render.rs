@@ -1,6 +1,6 @@
 //! Lossless typed values and separate trace/graph projections of checker results.
 use serde_json::{Value as Json, json};
-use tla_checker::{BoundModel, Completion, Liveness, Outcome, State, Value, ViolationKind};
+use tlaplus_checker::{BoundModel, Completion, Liveness, Outcome, State, Value, ViolationKind};
 
 fn value(v: &Value) -> Json {
     let (kind, data) = match v {
@@ -14,7 +14,7 @@ fn value(v: &Value) -> Json {
             Json::Array(v.iter().map(|(k, v)| json!([value(k), value(v)])).collect()),
         ),
     };
-    json!({"kind":kind,"data":data,"text":tla_value_expr::stringify(&tla_value_expr::Expr::atom(v.clone())).unwrap_or_else(|_| format!("{v:?}"))})
+    json!({"kind":kind,"data":data,"text":tlaplus_value_expr::stringify(&tlaplus_value_expr::Expr::atom(v.clone())).unwrap_or_else(|_| format!("{v:?}"))})
 }
 
 fn state(s: &State, model: &BoundModel) -> Json {
@@ -29,7 +29,7 @@ fn state(s: &State, model: &BoundModel) -> Json {
     )
 }
 
-pub fn outcome(model: &BoundModel, outcome: Outcome, artifact: Option<&tla_dsl::Artifact>) -> Json {
+pub fn outcome(model: &BoundModel, outcome: Outcome, artifact: Option<&tlaplus_dsl::Artifact>) -> Json {
     let action = |index: usize| {
         let name = &model.checks.actions[index].0;
         let original = artifact.and_then(|a| {

@@ -2,7 +2,7 @@
 use crate::binders::{function, intro, names_of, nest, product};
 use crate::expressions::{all, expression, get, is_product, key_or_tuple, symbol};
 use crate::modules::{children, error, field, text};
-use tla_syntax::{Diagnostic, Expr};
+use tlaplus_syntax::{Diagnostic, Expr};
 use tree_sitter::Node;
 
 /// `[f EXCEPT ![a][b] = e, ...]` as `$Except(f, <<<<a, b>>, e>>, ...)`;

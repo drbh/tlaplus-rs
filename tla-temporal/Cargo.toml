@@ -1,13 +1,15 @@
 [package]
-name = "tla-temporal"
+name = "tlaplus-temporal"
 version.workspace = true
 edition.workspace = true
-publish.workspace = true
+description = "Temporal preparation, behavior graphs and liveness checking"
+license.workspace = true
+repository.workspace = true
 
 [dependencies]
-tla-modules = { path = "../tla-modules" }
-tla-props = { path = "../tla-props" }
-tla-ir = { path = "../tla-ir" }
-tla-model = { path = "../tla-model" }
-tla-values = { path = "../tla-values" }
-tla-engine = { path = "../tla-engine" }
+tlaplus-modules = { path = "../tla-modules", version = "0.1.0" }
+tlaplus-props = { path = "../tla-props", version = "0.1.0" }
+tlaplus-ir = { path = "../tla-ir", version = "0.1.0" }
+tlaplus-model = { path = "../tla-model", version = "0.1.0" }
+tlaplus-values = { path = "../tla-values", version = "0.1.0" }
+tlaplus-engine = { path = "../tla-engine", version = "0.1.0" }

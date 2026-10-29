@@ -1,20 +1,20 @@
 [package]
-name = "tla-stack-tests"
+name = "tlaplus-stack-tests"
 version.workspace = true
 edition.workspace = true
-publish.workspace = true
+publish = false
 description = "Tests that need the whole native stack, including those that compare it with the faithful port."
 
 [dev-dependencies]
-tla-bridge = { path = "../tla-bridge" }
-tla-engine = { path = "../tla-engine" }
-tla-eval = { path = "../tla-eval" }
-tla-ir = { path = "../tla-ir" }
-tla-library = { path = "../tla-library" }
-tla-model = { path = "../tla-model" }
-tla-random = { path = "../tla-random" }
-tla-value-expr = { path = "../tla-value-expr" }
-tla-values = { path = "../tla-values" }
+tlaplus-bridge = { path = "../tla-bridge" }
+tlaplus-engine = { path = "../tla-engine" }
+tlaplus-eval = { path = "../tla-eval" }
+tlaplus-ir = { path = "../tla-ir" }
+tlaplus-library = { path = "../tla-library" }
+tlaplus-model = { path = "../tla-model" }
+tlaplus-random = { path = "../tla-random" }
+tlaplus-value-expr = { path = "../tla-value-expr" }
+tlaplus-values = { path = "../tla-values" }
 tempfile = "3"
 serde_json = "1"
 flate2 = "1"

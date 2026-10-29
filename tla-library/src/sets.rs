@@ -1,8 +1,8 @@
 //! Finite set operators, including the enumerations TLC materializes:
 //! Cartesian products, power sets and permutations.
 use crate::{Error, integer};
-use tla_ir::Builtin;
-use tla_values::Value;
+use tlaplus_ir::Builtin;
+use tlaplus_values::Value;
 
 pub(crate) fn apply(op: Builtin, args: &[Value]) -> Result<Value, Error> {
     use Builtin::*;

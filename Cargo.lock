@@ -474,223 +474,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tla-bridge"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "tla-conformance",
- "tla-engine",
- "tla-ir",
- "tla-model",
- "tla-oracle",
- "tla-sany-semantic",
- "tla-tlc",
- "tla-tlc-eval",
- "tla-tlc-value",
- "tla-values",
-]
-
-[[package]]
-name = "tla-checker"
-version = "0.1.0"
-dependencies = [
- "tla-disk",
- "tla-engine",
- "tla-ir",
- "tla-lower",
- "tla-model",
- "tla-modules",
- "tla-observe",
- "tla-parser",
- "tla-props",
- "tla-temporal",
-]
-
-[[package]]
-name = "tla-cli"
-version = "0.1.0"
-dependencies = [
- "tempfile",
- "tla-checker",
- "tla-dsl",
- "tla-observe",
- "tla-value-expr",
-]
-
-[[package]]
-name = "tla-conformance"
-version = "0.1.0"
-dependencies = [
- "flate2",
- "serde",
- "serde_json",
- "tempfile",
- "tla-bridge",
- "tla-disk",
- "tla-engine",
- "tla-eval",
- "tla-model",
- "tla-observe",
- "tla-values",
-]
-
-[[package]]
-name = "tla-disk"
-version = "0.1.0"
-dependencies = [
- "redb",
- "tempfile",
- "tla-engine",
- "tla-values",
-]
-
-[[package]]
-name = "tla-dsl"
-version = "0.1.0"
-
-[[package]]
-name = "tla-engine"
-version = "0.1.0"
-dependencies = [
- "rayon",
-]
-
-[[package]]
-name = "tla-eval"
-version = "0.1.0"
-dependencies = [
- "stacker",
- "tla-ir",
- "tla-library",
- "tla-random",
- "tla-runtime",
- "tla-value-expr",
- "tla-values",
-]
-
-[[package]]
-name = "tla-ir"
-version = "0.1.0"
-
-[[package]]
-name = "tla-library"
-version = "0.1.0"
-dependencies = [
- "tla-ir",
- "tla-value-expr",
- "tla-values",
-]
-
-[[package]]
-name = "tla-lower"
-version = "0.1.0"
-dependencies = [
- "tla-ir",
- "tla-modules",
- "tla-syntax",
-]
-
-[[package]]
-name = "tla-model"
-version = "0.1.0"
-dependencies = [
- "flate2",
- "rayon",
- "serde_json",
- "stacker",
- "tempfile",
- "tla-engine",
- "tla-eval",
- "tla-ir",
- "tla-runtime",
-]
-
-[[package]]
-name = "tla-modules"
-version = "0.1.0"
-dependencies = [
- "tla-ir",
- "tla-parser",
- "tla-syntax",
-]
-
-[[package]]
-name = "tla-observe"
-version = "0.1.0"
-dependencies = [
- "serde_json",
- "tla-engine",
-]
-
-[[package]]
-name = "tla-oracle"
-version = "0.1.0"
-dependencies = [
- "flate2",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "tla-oracle-cli"
-version = "0.1.0"
-dependencies = [
- "flate2",
- "serde_json",
- "tempfile",
- "tla-oracle",
-]
-
-[[package]]
-name = "tla-parser"
-version = "0.1.0"
-dependencies = [
- "tla-syntax",
- "tree-sitter",
- "tree-sitter-tlaplus",
-]
-
-[[package]]
-name = "tla-playground"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "tempfile",
- "tla-checker",
- "tla-dsl",
- "tla-parser",
- "tla-value-expr",
-]
-
-[[package]]
-name = "tla-props"
-version = "0.1.0"
-dependencies = [
- "petgraph",
-]
-
-[[package]]
-name = "tla-random"
-version = "0.1.0"
-dependencies = [
- "num-bigint",
- "tla-eval",
- "tla-value-expr",
- "tla-values",
-]
-
-[[package]]
-name = "tla-runtime"
-version = "0.1.0"
-dependencies = [
- "tla-library",
- "tla-value-expr",
- "tla-values",
-]
-
-[[package]]
 name = "tla-sany"
 version = "0.1.0"
 dependencies = [
@@ -708,40 +491,6 @@ dependencies = [
 [[package]]
 name = "tla-sany-syntax"
 version = "0.1.0"
-
-[[package]]
-name = "tla-stack-tests"
-version = "0.1.0"
-dependencies = [
- "flate2",
- "serde_json",
- "tempfile",
- "tla-bridge",
- "tla-engine",
- "tla-eval",
- "tla-ir",
- "tla-library",
- "tla-model",
- "tla-random",
- "tla-value-expr",
- "tla-values",
-]
-
-[[package]]
-name = "tla-syntax"
-version = "0.1.0"
-
-[[package]]
-name = "tla-temporal"
-version = "0.1.0"
-dependencies = [
- "tla-engine",
- "tla-ir",
- "tla-model",
- "tla-modules",
- "tla-props",
- "tla-values",
-]
 
 [[package]]
 name = "tla-tlc"
@@ -796,25 +545,276 @@ dependencies = [
 ]
 
 [[package]]
-name = "tla-value-conformance"
+name = "tlaplus-bridge"
 version = "0.1.0"
 dependencies = [
+ "serde",
  "serde_json",
- "tla-bridge",
- "tla-value-expr",
- "tla-values",
+ "tla-sany-semantic",
+ "tla-tlc",
+ "tla-tlc-eval",
+ "tla-tlc-value",
+ "tlaplus-conformance",
+ "tlaplus-engine",
+ "tlaplus-ir",
+ "tlaplus-model",
+ "tlaplus-oracle",
+ "tlaplus-values",
 ]
 
 [[package]]
-name = "tla-value-expr"
+name = "tlaplus-checker"
 version = "0.1.0"
 dependencies = [
- "serde_json",
- "tla-values",
+ "tlaplus-disk",
+ "tlaplus-engine",
+ "tlaplus-ir",
+ "tlaplus-lower",
+ "tlaplus-model",
+ "tlaplus-modules",
+ "tlaplus-observe",
+ "tlaplus-parser",
+ "tlaplus-props",
+ "tlaplus-temporal",
 ]
 
 [[package]]
-name = "tla-values"
+name = "tlaplus-cli"
+version = "0.1.0"
+dependencies = [
+ "tempfile",
+ "tlaplus-checker",
+ "tlaplus-dsl",
+ "tlaplus-observe",
+ "tlaplus-value-expr",
+]
+
+[[package]]
+name = "tlaplus-conformance"
+version = "0.1.0"
+dependencies = [
+ "flate2",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tlaplus-bridge",
+ "tlaplus-disk",
+ "tlaplus-engine",
+ "tlaplus-eval",
+ "tlaplus-model",
+ "tlaplus-observe",
+ "tlaplus-values",
+]
+
+[[package]]
+name = "tlaplus-disk"
+version = "0.1.0"
+dependencies = [
+ "redb",
+ "tempfile",
+ "tlaplus-engine",
+ "tlaplus-values",
+]
+
+[[package]]
+name = "tlaplus-dsl"
+version = "0.1.0"
+
+[[package]]
+name = "tlaplus-engine"
+version = "0.1.0"
+dependencies = [
+ "rayon",
+]
+
+[[package]]
+name = "tlaplus-eval"
+version = "0.1.0"
+dependencies = [
+ "stacker",
+ "tlaplus-ir",
+ "tlaplus-library",
+ "tlaplus-random",
+ "tlaplus-runtime",
+ "tlaplus-value-expr",
+ "tlaplus-values",
+]
+
+[[package]]
+name = "tlaplus-ir"
+version = "0.1.0"
+
+[[package]]
+name = "tlaplus-library"
+version = "0.1.0"
+dependencies = [
+ "tlaplus-ir",
+ "tlaplus-value-expr",
+ "tlaplus-values",
+]
+
+[[package]]
+name = "tlaplus-lower"
+version = "0.1.0"
+dependencies = [
+ "tlaplus-ir",
+ "tlaplus-modules",
+ "tlaplus-syntax",
+]
+
+[[package]]
+name = "tlaplus-model"
+version = "0.1.0"
+dependencies = [
+ "flate2",
+ "rayon",
+ "serde_json",
+ "stacker",
+ "tempfile",
+ "tlaplus-engine",
+ "tlaplus-eval",
+ "tlaplus-ir",
+ "tlaplus-runtime",
+]
+
+[[package]]
+name = "tlaplus-modules"
+version = "0.1.0"
+dependencies = [
+ "tlaplus-ir",
+ "tlaplus-parser",
+ "tlaplus-syntax",
+]
+
+[[package]]
+name = "tlaplus-observe"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "tlaplus-engine",
+]
+
+[[package]]
+name = "tlaplus-oracle"
+version = "0.1.0"
+dependencies = [
+ "flate2",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "tlaplus-oracle-cli"
+version = "0.1.0"
+dependencies = [
+ "flate2",
+ "serde_json",
+ "tempfile",
+ "tlaplus-oracle",
+]
+
+[[package]]
+name = "tlaplus-parser"
+version = "0.1.0"
+dependencies = [
+ "tlaplus-syntax",
+ "tree-sitter",
+ "tree-sitter-tlaplus",
+]
+
+[[package]]
+name = "tlaplus-playground"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tlaplus-checker",
+ "tlaplus-dsl",
+ "tlaplus-parser",
+ "tlaplus-value-expr",
+]
+
+[[package]]
+name = "tlaplus-props"
+version = "0.1.0"
+dependencies = [
+ "petgraph",
+]
+
+[[package]]
+name = "tlaplus-random"
+version = "0.1.0"
+dependencies = [
+ "num-bigint",
+ "tlaplus-eval",
+ "tlaplus-value-expr",
+ "tlaplus-values",
+]
+
+[[package]]
+name = "tlaplus-runtime"
+version = "0.1.0"
+dependencies = [
+ "tlaplus-library",
+ "tlaplus-value-expr",
+ "tlaplus-values",
+]
+
+[[package]]
+name = "tlaplus-stack-tests"
+version = "0.1.0"
+dependencies = [
+ "flate2",
+ "serde_json",
+ "tempfile",
+ "tlaplus-bridge",
+ "tlaplus-engine",
+ "tlaplus-eval",
+ "tlaplus-ir",
+ "tlaplus-library",
+ "tlaplus-model",
+ "tlaplus-random",
+ "tlaplus-value-expr",
+ "tlaplus-values",
+]
+
+[[package]]
+name = "tlaplus-syntax"
+version = "0.1.0"
+
+[[package]]
+name = "tlaplus-temporal"
+version = "0.1.0"
+dependencies = [
+ "tlaplus-engine",
+ "tlaplus-ir",
+ "tlaplus-model",
+ "tlaplus-modules",
+ "tlaplus-props",
+ "tlaplus-values",
+]
+
+[[package]]
+name = "tlaplus-value-conformance"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "tlaplus-bridge",
+ "tlaplus-value-expr",
+ "tlaplus-values",
+]
+
+[[package]]
+name = "tlaplus-value-expr"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "tlaplus-values",
+]
+
+[[package]]
+name = "tlaplus-values"
 version = "0.1.0"
 
 [[package]]

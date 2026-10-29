@@ -1,9 +1,9 @@
 use crate::Error;
 use std::collections::{BTreeSet, HashMap};
-use tla_engine::{Completion, Report, TransitionSystem};
-use tla_ir::ExprId;
-use tla_model::{BoundModel, State};
-use tla_props::{Edge, Formula, Graph, Lasso};
+use tlaplus_engine::{Completion, Report, TransitionSystem};
+use tlaplus_ir::ExprId;
+use tlaplus_model::{BoundModel, State};
+use tlaplus_props::{Edge, Formula, Graph, Lasso};
 
 #[derive(Clone, Copy)]
 pub struct Atom {

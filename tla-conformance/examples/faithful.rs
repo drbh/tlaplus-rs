@@ -2,12 +2,12 @@ use std::fs;
 use std::path::Path;
 use std::time::Duration;
 
-use tla_bridge::{
+use tlaplus_bridge::{
     Answers, Comparison, Mode, ModelRequest, ObservedRun, Outcome, RunEnv, compare,
     observe_faithful, with_model,
 };
-use tla_conformance::{Case, Execution, Request, examples, execute, execute_suite};
-use tla_engine::{Completion, Options, ViolationKind, explore, validate_trace};
+use tlaplus_conformance::{Case, Execution, Request, examples, execute, execute_suite};
+use tlaplus_engine::{Completion, Options, ViolationKind, explore, validate_trace};
 
 #[derive(serde::Deserialize, serde::Serialize)]
 struct EngineOutput {
@@ -40,7 +40,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     .configured_properties
                     .iter()
                     .flatten()
-                    .any(|p| p.kind == tla_bridge::PropertyKind::Temporal)
+                    .any(|p| p.kind == tlaplus_bridge::PropertyKind::Temporal)
             }
             _ => false,
         });
@@ -159,12 +159,12 @@ fn engine(request: &Request) -> EngineOutput {
         trace: None,
         error: Some(error),
     };
-    let parsed = match tla_bridge::FaithfulArgs::parse(&request.args) {
+    let parsed = match tlaplus_bridge::FaithfulArgs::parse(&request.args) {
         Ok(parsed) => parsed,
         Err(error) => return unknown(error.0),
     };
     if parsed.dfid.is_some()
-        || !matches!(parsed.run_mode, tla_bridge::FaithfulRunMode::ModelCheck)
+        || !matches!(parsed.run_mode, tlaplus_bridge::FaithfulRunMode::ModelCheck)
         || parsed.continuation
         || !request.system_properties.is_empty()
     {
@@ -236,10 +236,10 @@ fn engine(request: &Request) -> EngineOutput {
     result.unwrap_or_else(|error| {
         let outcome = match error.code {
             Some(
-                tla_bridge::recording::TLC_PARSING_FAILED
-                | tla_bridge::recording::TLC_PARSING_FAILED2,
+                tlaplus_bridge::recording::TLC_PARSING_FAILED
+                | tlaplus_bridge::recording::TLC_PARSING_FAILED2,
             ) => Outcome::Rejected,
-            Some(tla_bridge::recording::TLC_ASSUMPTION_FALSE) => Outcome::AssumptionViolated,
+            Some(tlaplus_bridge::recording::TLC_ASSUMPTION_FALSE) => Outcome::AssumptionViolated,
             _ => Outcome::Unknown,
         };
         EngineOutput {

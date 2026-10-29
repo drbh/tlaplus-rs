@@ -3,7 +3,7 @@
 use std::path::Path;
 use std::process::ExitCode;
 
-use tla_oracle::corpus::{Corpus, compare_corpora};
+use tlaplus_oracle::corpus::{Corpus, compare_corpora};
 
 fn run() -> Result<bool, Box<dyn std::error::Error>> {
     let args: Vec<_> = std::env::args().skip(1).collect();

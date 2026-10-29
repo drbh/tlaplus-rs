@@ -1,22 +1,22 @@
 [package]
-name = "tla-bridge"
+name = "tlaplus-bridge"
 version.workspace = true
 edition.workspace = true
-publish.workspace = true
+publish = false
 description = "Development-only oracle adapters for the TLC rewrite"
 
 [dependencies]
-tla-ir = { path = "../tla-ir" }
-tla-model = { path = "../tla-model" }
+tlaplus-ir = { path = "../tla-ir", version = "0.1.0" }
+tlaplus-model = { path = "../tla-model", version = "0.1.0" }
 tla-sany-semantic = { path = "../../tlaplus-rs-explore/crates/tla-sany-semantic" }
-tla-values = { path = "../tla-values" }
-tla-engine = { path = "../tla-engine" }
-tla-oracle = { path = "../tla-oracle" }
+tlaplus-values = { path = "../tla-values", version = "0.1.0" }
+tlaplus-engine = { path = "../tla-engine", version = "0.1.0" }
+tlaplus-oracle = { path = "../tla-oracle", version = "0.1.0" }
 tla-tlc = { path = "../../tlaplus-rs-explore/crates/tla-tlc" }
 tla-tlc-eval = { path = "../../tlaplus-rs-explore/crates/tla-tlc-eval" }
 tla-tlc-value = { path = "../../tlaplus-rs-explore/crates/tla-tlc-value" }
 serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
-tla-conformance = { path = "../tla-conformance" }
+tlaplus-conformance = { path = "../tla-conformance" }
 serde_json = "1"

@@ -1,6 +1,6 @@
-use tla_oracle::tool::code as mp;
-use tla_oracle::tool::{Message, extract_messages, extract_records, parse_stream};
-use tla_oracle::{Answers, Comparison, Difference, Mode, Outcome, compare};
+use tlaplus_oracle::tool::code as mp;
+use tlaplus_oracle::tool::{Message, extract_messages, extract_records, parse_stream};
+use tlaplus_oracle::{Answers, Comparison, Difference, Mode, Outcome, compare};
 
 fn message(code: i32, text: &str) -> Message {
     Message {

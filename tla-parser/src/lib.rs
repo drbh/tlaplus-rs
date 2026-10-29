@@ -4,7 +4,7 @@ mod binders;
 mod expressions;
 mod modules;
 pub use modules::module;
-use tla_syntax::Diagnostic;
+use tlaplus_syntax::Diagnostic;
 
 /// SANY reads a PlusCal algorithm as the comment it is; the grammar would parse it.
 fn blank_algorithms(source: &str) -> std::borrow::Cow<'_, str> {
@@ -138,7 +138,7 @@ fn validate(root: tree_sitter::Node<'_>, source: &str) -> Result<(), Diagnostic>
     while let Some(node) = work.pop() {
         let symbol = node.child_by_field_name("symbol");
         let incompatible = match node.kind() {
-            "string" | "string_literal" => tla_syntax::expression(text(node, source)).is_err(),
+            "string" | "string_literal" => tlaplus_syntax::expression(text(node, source)).is_err(),
             "infix_op_symbol" => {
                 matches!(text(node, source), "\\X" | "\\times")
                     && node
@@ -204,7 +204,7 @@ mod tests {
         let module = module("---- MODULE Test ----\nF == LET A == 1 IN A + 2\n====").unwrap();
         assert!(matches!(
             module.definitions[0].body,
-            tla_syntax::Expr::Let(_, _)
+            tlaplus_syntax::Expr::Let(_, _)
         ));
         assert!(module.assumptions.is_empty());
     }
@@ -233,7 +233,7 @@ mod tests {
         let module = module(source).unwrap();
         assert!(matches!(
             module.definitions[0].body,
-            tla_syntax::Expr::Binary(_, _, _)
+            tlaplus_syntax::Expr::Binary(_, _, _)
         ));
         assert!(parse(&source.replace("4 -> 5", "4 5")).is_err());
         assert!(parse(&source.replace("[] 4 -> 5", "[] -> 5")).is_err());

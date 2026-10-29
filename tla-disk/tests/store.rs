@@ -1,5 +1,5 @@
 use std::num::NonZeroUsize;
-use tla_disk::store::{Node, Store};
+use tlaplus_disk::store::{Node, Store};
 
 #[test]
 fn exact_keys_queue_and_parents_survive_reopening() {

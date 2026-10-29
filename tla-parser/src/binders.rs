@@ -1,6 +1,6 @@
 use crate::expressions::expression;
 use crate::modules::{children, error, field, text};
-use tla_syntax::{Diagnostic, Expr};
+use tlaplus_syntax::{Diagnostic, Expr};
 use tree_sitter::Node;
 
 /// A binder's names and whether they destructure a tuple.

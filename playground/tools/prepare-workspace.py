@@ -28,7 +28,7 @@ for crate in crates:
     if target.exists():
         shutil.rmtree(target)
     shutil.copytree(crate, target)
-for name in ('examples', 'library'):
+for name in ('examples',):
     shutil.copytree(root / name, stage / name, dirs_exist_ok=True)
 manifest = (root / 'Cargo.toml').read_text()
 members = ', '.join('"' + crate.name + '"' for crate in sorted(crates))

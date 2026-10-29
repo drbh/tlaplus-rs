@@ -1,5 +1,5 @@
 use super::*;
-use tla_modules::{config, load};
+use tlaplus_modules::{config, load};
 
 #[test]
 fn configuration_and_lowering() {
@@ -8,13 +8,13 @@ fn configuration_and_lowering() {
     )
     .unwrap();
     assert_eq!(config.constants.len(), 2);
-    let module = tla_syntax::module("---- MODULE C ----\nCONSTANTS N,S\nVARIABLE x\nInit == x = 0\nNext == x' = (x + 1) % N\nInv == x < N\n====").unwrap();
+    let module = tlaplus_syntax::module("---- MODULE C ----\nCONSTANTS N,S\nVARIABLE x\nInit == x = 0\nNext == x' = (x + 1) % N\nInv == x < N\n====").unwrap();
     let lowered = lower(&module, &config).unwrap();
     assert_eq!(lowered.bindings.len(), 2);
     assert_eq!(lowered.program.operators.len(), 3);
     assert_eq!(
         lowered.program.nodes[lowered.program.operators[1].body].level,
-        tla_ir::Level::Action
+        tlaplus_ir::Level::Action
     );
     for text in [
         "INIT A INIT B",
@@ -23,7 +23,7 @@ fn configuration_and_lowering() {
         "SPECIFICATION S INIT I",
         "UNKNOWN X",
     ] {
-        assert!(tla_modules::config(text).is_err(), "{text}");
+        assert!(tlaplus_modules::config(text).is_err(), "{text}");
     }
 }
 
@@ -40,17 +40,17 @@ fn names_arity_recursion_and_levels() {
         } else {
             format!("---- MODULE M ----\nVARIABLE x\n{body}\n====")
         };
-        let module = tla_syntax::module(&source).unwrap();
+        let module = tlaplus_syntax::module(&source).unwrap();
         let failed =
             lower(&module, &Config::default()).map_or(true, |lowered| !lowered.failures.is_empty());
         assert!(failed, "{body}");
     }
-    let module = tla_syntax::module(
+    let module = tlaplus_syntax::module(
         "---- MODULE M ----\nRECURSIVE F(_)\nF(x) == IF x = 0 THEN 0 ELSE F(x - 1)\nG == F(2)\n====",
     );
     // The hand-written parser has no RECURSIVE; mark the declaration directly.
     let mut module = module.unwrap_or_else(|_| {
-        tla_syntax::module(
+        tlaplus_syntax::module(
             "---- MODULE M ----\nF(x) == IF x = 0 THEN 0 ELSE F(x - 1)\nG == F(2)\n====",
         )
         .unwrap()
@@ -60,7 +60,7 @@ fn names_arity_recursion_and_levels() {
     assert!(lowered.failures.is_empty());
     assert_eq!(
         lowered.program.nodes[lowered.program.operators[0].body].level,
-        tla_ir::Level::Constant
+        tlaplus_ir::Level::Constant
     );
     module.definitions[0].recursive = false;
     let lowered = lower(&module, &Config::default()).unwrap();
@@ -126,7 +126,7 @@ fn local_operators_remain_private_after_extends() {
 
 #[test]
 fn assert_error_retains_source_literal_syntax_and_user_shadowing() {
-    let module = tla_syntax::module(
+    let module = tlaplus_syntax::module(
         r#"---- MODULE M ----
 CONSTANT Message
 A == AssertError("literal", TRUE)
@@ -138,12 +138,12 @@ C == AssertError("a" \o "b", TRUE)
     let lowered = lower(&module, &config("CONSTANT Message = \"literal\"").unwrap()).unwrap();
     for (index, expected) in [Some("literal"), None, None].into_iter().enumerate() {
         let body = lowered.program.operators[index].body;
-        let tla_ir::Expr::AssertError { message, .. } = &lowered.program.nodes[body].expr else {
+        let tlaplus_ir::Expr::AssertError { message, .. } = &lowered.program.nodes[body].expr else {
             panic!("expected literal-aware error assertion");
         };
         assert_eq!(message.as_deref(), expected);
     }
-    let module = tla_syntax::module(
+    let module = tlaplus_syntax::module(
         "---- MODULE M ----\nAssertError(e,b) == b\nA == AssertError(1,TRUE)\n====",
     )
     .unwrap();
@@ -153,6 +153,6 @@ C == AssertError("a" \o "b", TRUE)
             .program
             .nodes
             .iter()
-            .any(|node| matches!(node.expr, tla_ir::Expr::AssertError { .. }))
+            .any(|node| matches!(node.expr, tlaplus_ir::Expr::AssertError { .. }))
     );
 }

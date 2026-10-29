@@ -4,7 +4,7 @@
 use super::Lower;
 use crate::model::ModelError;
 use std::collections::HashMap;
-use tla_ir::{Builtin, Expr, ExprId, Level, Literal, Program, Quantifier};
+use tlaplus_ir::{Builtin, Expr, ExprId, Level, Literal, Program, Quantifier};
 use tla_sany_semantic::NodeId;
 use tla_sany_semantic::nodes::{NodeData, OpApplData};
 use tla_tlc_eval::context::Context;
@@ -873,7 +873,7 @@ impl<'a> Lower<'a> {
             if let Some(name) = &def.name {
                 self.cache.names.insert(name.as_str().to_owned(), op);
             }
-            self.program.operators.push(tla_ir::Operator {
+            self.program.operators.push(tlaplus_ir::Operator {
                 name: def.name.map(|n| n.as_str().to_owned()).unwrap_or_default(),
                 parameters: slots.clone(),
                 body: 0,

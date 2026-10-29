@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use tla_values::{Error, SetExpr, Value};
+use tlaplus_values::{Error, SetExpr, Value};
 
 #[test]
 fn lazy_sets_and_extensional_functions() {

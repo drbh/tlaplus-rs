@@ -1,14 +1,14 @@
-use tla_library::stringify;
-use tla_value_expr::Expr;
-use tla_values::Value;
+use tlaplus_library::stringify;
+use tlaplus_value_expr::Expr;
+use tlaplus_values::Value;
 
 #[test]
 fn canonical_rendering_matches_faithful_values() {
-    tla_bridge::values::with_value_session(|| {
+    tlaplus_bridge::values::with_value_session(|| {
         let words = ["a", "word space", "quote\"", "line\nbreak", "tab\t", "α"];
         let atoms = words
             .iter()
-            .map(|s| tla_bridge::values::intern_value(s, false).unwrap())
+            .map(|s| tlaplus_bridge::values::intern_value(s, false).unwrap())
             .collect::<Vec<_>>();
         let mut seed = 0xabc621efu64;
         for _ in 0..10_000 {
@@ -26,7 +26,7 @@ fn canonical_rendering_matches_faithful_values() {
                 )
                 .unwrap(),
             };
-            let faithful = tla_bridge::values::to_faithful(&value).unwrap();
+            let faithful = tlaplus_bridge::values::to_faithful(&value).unwrap();
             assert_eq!(
                 stringify(&Expr::atom(value.clone())).unwrap(),
                 faithful.to_string_checked().unwrap(),

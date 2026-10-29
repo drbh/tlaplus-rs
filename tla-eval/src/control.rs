@@ -3,8 +3,8 @@
 use crate::{
     Error, Evaluator, deferred, functional, functional::with_binding, functional::with_bindings,
 };
-use tla_ir::{Builtin, Expr, ExprId, Quantifier};
-use tla_values::Value;
+use tlaplus_ir::{Builtin, Expr, ExprId, Quantifier};
+use tlaplus_values::Value;
 
 type Locals = Vec<Option<Value>>;
 
@@ -137,7 +137,7 @@ impl Evaluator<'_> {
             }
             Builtin::Subsequence if values.len() == 3 => {
                 let units = units();
-                let range = tla_library::subsequence_range(
+                let range = tlaplus_library::subsequence_range(
                     &values[0],
                     &values[1],
                     &values[2],

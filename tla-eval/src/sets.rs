@@ -2,8 +2,8 @@ use crate::deferred::runtime;
 use crate::functional::with_binding;
 use crate::functional::{LIMIT, projected, with_bindings};
 use crate::{Error, Evaluator, Value};
-use tla_ir::{Builtin as B, Expr as Ir, ExprId};
-use tla_value_expr::Expr;
+use tlaplus_ir::{Builtin as B, Expr as Ir, ExprId};
+use tlaplus_value_expr::Expr;
 
 /// The domain expression of a function constructor `[x \in D |-> e]`.
 fn function_domain(evaluator: &Evaluator<'_>, args: &[ExprId]) -> Option<ExprId> {
@@ -78,7 +78,7 @@ fn applied_inner(
         _ => None,
     };
     if let Some(function) = direct {
-        return tla_library::apply(&Expr::atom(function), argument);
+        return tlaplus_library::apply(&Expr::atom(function), argument);
     }
     let (id, mut captures) = projected(evaluator, id, locals, depth + 1)?;
     let locals = &mut captures;
@@ -94,7 +94,7 @@ fn applied_inner(
                 && !runtime(evaluator, *domain, locals, depth + 1)?.contains(argument)?
             {
                 let value = runtime(evaluator, id, locals, depth + 1)?;
-                return Err(Error(tla_library::function_domain_error(&value, argument)?));
+                return Err(Error(tlaplus_library::function_domain_error(&value, argument)?));
             }
             let argument = argument.normalize(LIMIT)?;
             with_binding(locals, *slot, argument, |locals| {
@@ -177,7 +177,7 @@ fn applied_inner(
                 applied(evaluator, base, argument, locals, depth + 1)
             }
         }
-        _ => tla_library::apply(&runtime(evaluator, id, locals, depth + 1)?, argument),
+        _ => tlaplus_library::apply(&runtime(evaluator, id, locals, depth + 1)?, argument),
     }
 }
 
@@ -200,7 +200,7 @@ pub(crate) fn member(
             .expr
         {
             Ir::Quantify {
-                kind: tla_ir::Quantifier::SetFilter,
+                kind: tlaplus_ir::Quantifier::SetFilter,
                 slot,
                 domain,
                 body,
@@ -273,7 +273,7 @@ pub(crate) fn member(
                     _ => first && !member(evaluator, args[1], value, locals, depth + 1)?,
                 })
             }
-            _ => tla_library::contains(&runtime(evaluator, id, locals, depth + 1)?, value),
+            _ => tlaplus_library::contains(&runtime(evaluator, id, locals, depth + 1)?, value),
         }
     })
 }

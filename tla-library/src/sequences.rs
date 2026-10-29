@@ -1,7 +1,7 @@
 //! The `Sequences` module over tuples.
 use crate::{Error, integer, subsequence_range, text::sequence_operand};
-use tla_ir::Builtin;
-use tla_values::Value;
+use tlaplus_ir::Builtin;
+use tlaplus_values::Value;
 
 pub(crate) fn apply(op: Builtin, args: &[Value]) -> Result<Value, Error> {
     use Builtin::*;

@@ -1,5 +1,5 @@
 use crate::{expressions::expression, parse};
-use tla_syntax::{Definition, Diagnostic, Expr, Module};
+use tlaplus_syntax::{Definition, Diagnostic, Expr, Module};
 use tree_sitter::Node;
 
 pub fn module(source: &str) -> Result<Module, Diagnostic> {
@@ -176,7 +176,7 @@ pub(crate) fn mark_recursive(definitions: &mut [Definition], names: &[String]) {
     }
 }
 
-fn module_definition(node: Node<'_>, source: &str) -> Result<tla_syntax::Instance, Diagnostic> {
+fn module_definition(node: Node<'_>, source: &str) -> Result<tlaplus_syntax::Instance, Diagnostic> {
     let mut cursor = node.walk();
     let parameters = node
         .children_by_field_name("parameter", &mut cursor)
@@ -201,7 +201,7 @@ fn instance(
     name: Option<String>,
     parameters: Vec<String>,
     source: &str,
-) -> Result<tla_syntax::Instance, Diagnostic> {
+) -> Result<tlaplus_syntax::Instance, Diagnostic> {
     let nodes = children(node);
     let module = nodes
         .first()
@@ -215,7 +215,7 @@ fn instance(
         }
         substitutions.push((name, expression(*parts.last().unwrap(), source)?));
     }
-    Ok(tla_syntax::Instance {
+    Ok(tlaplus_syntax::Instance {
         local: false,
         name,
         parameters,

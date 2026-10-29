@@ -3,21 +3,21 @@
 mod dsl;
 mod trace;
 use std::{fmt, num::NonZeroUsize, path::PathBuf};
-use tla_checker::{Bound, BoundModel, Completion, Disk, Liveness, Outcome, Settings};
+use tlaplus_checker::{Bound, BoundModel, Completion, Disk, Liveness, Outcome, Settings};
 
 /// Why the command could not finish.
 #[derive(Debug)]
 enum Error {
     Dsl {
         path: PathBuf,
-        error: tla_dsl::Error,
+        error: tlaplus_dsl::Error,
     },
     Usage(String),
     Io {
         path: PathBuf,
         error: std::io::Error,
     },
-    Check(tla_checker::Error),
+    Check(tlaplus_checker::Error),
     /// The timing trace could not be written.
     Trace(String),
     Panicked,
@@ -35,8 +35,8 @@ impl fmt::Display for Error {
     }
 }
 
-impl From<tla_checker::Error> for Error {
-    fn from(e: tla_checker::Error) -> Self {
+impl From<tlaplus_checker::Error> for Error {
+    fn from(e: tlaplus_checker::Error) -> Self {
         Self::Check(e)
     }
 }
@@ -143,7 +143,7 @@ impl Arguments {
 
 fn run(args: Vec<String>) -> Result<i32, Error> {
     let path = std::env::var_os("REWRITE_TRACE").map(PathBuf::from);
-    let timeline = path.as_ref().map(|_| tla_observe::Timeline::new());
+    let timeline = path.as_ref().map(|_| tlaplus_observe::Timeline::new());
     let result = run_model(args, timeline.as_ref());
     if let (Some(path), Some(timeline)) = (path, timeline) {
         let file = std::fs::File::create(&path).map_err(|error| Error::Io { path, error })?;
@@ -154,7 +154,7 @@ fn run(args: Vec<String>) -> Result<i32, Error> {
     result
 }
 
-fn run_model(args: Vec<String>, timeline: Option<&tla_observe::Timeline>) -> Result<i32, Error> {
+fn run_model(args: Vec<String>, timeline: Option<&tlaplus_observe::Timeline>) -> Result<i32, Error> {
     if args.iter().any(|arg| arg == "--help" || arg == "-h") {
         println!(
             "Usage: tla [--config FILE] [--workers N] [--no-deadlock] [--continue] [--seed N] [--unicode] [--max-states N] [--library DIR] [--disk FILE --disk-cache-bytes N] SPEC.tla|SPEC.tsl\n       tla --export SPEC.tsl DIRECTORY\n       tla --check SPEC.tsl\nChecks finite models with INIT/NEXT or SPECIFICATION configuration. The experimental DSL compiles to TLA+ before checking. Export writes new .tla/.cfg files. Unsupported language and CLI features produce errors."
@@ -174,7 +174,7 @@ fn run_model(args: Vec<String>, timeline: Option<&tla_observe::Timeline>) -> Res
         }
         let path = PathBuf::from(&args[1]);
         let text = std::fs::read_to_string(&path).map_err(|error| Error::Io { path, error })?;
-        tla_checker::check_syntax(&text)?;
+        tlaplus_checker::check_syntax(&text)?;
         return Ok(0);
     }
     if args.first().is_some_and(|arg| arg == "--check") {
@@ -185,7 +185,7 @@ fn run_model(args: Vec<String>, timeline: Option<&tla_observe::Timeline>) -> Res
         if path.extension().is_some_and(|ext| ext == "tsl") {
             dsl::compile(&path)?;
         } else {
-            tla_checker::check_module(&path)?;
+            tlaplus_checker::check_module(&path)?;
         }
         return Ok(0);
     }
@@ -200,7 +200,7 @@ fn run_model(args: Vec<String>, timeline: Option<&tla_observe::Timeline>) -> Res
     } else {
         None
     };
-    let loaded = tla_checker::load(
+    let loaded = tlaplus_checker::load(
         generated.as_ref().map_or(&args.spec, |model| &model.path),
         args.config.as_deref(),
         &args.libraries,
@@ -213,7 +213,7 @@ fn run_model(args: Vec<String>, timeline: Option<&tla_observe::Timeline>) -> Res
         check_deadlock: args.check_deadlock,
         continue_after_violation: args.continue_after_violation,
     };
-    let mut checker = match tla_checker::bind(loaded, settings)? {
+    let mut checker = match tlaplus_checker::bind(loaded, settings)? {
         Bound::AssumptionViolated => {
             println!("ASSUME violated");
             return Ok(1);

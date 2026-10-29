@@ -113,8 +113,8 @@ fn safety_traces_point_back_to_dsl_actions() {
     )
     .unwrap();
     let generated = dsl::generate(&source).unwrap();
-    let loaded = tla_checker::load(&generated.path, None, &[], None).unwrap();
-    let Bound::Ready(mut checker) = tla_checker::bind(loaded, Settings::default()).unwrap() else {
+    let loaded = tlaplus_checker::load(&generated.path, None, &[], None).unwrap();
+    let Bound::Ready(mut checker) = tlaplus_checker::bind(loaded, Settings::default()).unwrap() else {
         panic!("ready model")
     };
     generated.annotate(&mut checker.model, &source);

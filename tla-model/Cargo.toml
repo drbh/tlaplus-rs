@@ -1,16 +1,18 @@
 [package]
-name = "tla-model"
+name = "tlaplus-model"
 version.workspace = true
 edition.workspace = true
-publish.workspace = true
+description = "Configured models, state generation and transition-system hooks"
+license.workspace = true
+repository.workspace = true
 
 [dependencies]
 rayon = "1"
 stacker = "0.1"
-tla-ir = { path = "../tla-ir" }
-tla-eval = { path = "../tla-eval" }
-tla-runtime = { path = "../tla-runtime" }
-tla-engine = { path = "../tla-engine" }
+tlaplus-ir = { path = "../tla-ir", version = "0.1.0" }
+tlaplus-eval = { path = "../tla-eval", version = "0.1.0" }
+tlaplus-runtime = { path = "../tla-runtime", version = "0.1.0" }
+tlaplus-engine = { path = "../tla-engine", version = "0.1.0" }
 
 [dev-dependencies]
 tempfile = "3"

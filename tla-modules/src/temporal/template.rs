@@ -1,7 +1,7 @@
 use super::{add, definition, temporal};
 use crate::Error;
 use std::collections::{BTreeMap, BTreeSet};
-use tla_syntax::{Expr, Module};
+use tlaplus_syntax::{Expr, Module};
 
 /// A temporal formula whose predicates are module definitions over the names
 /// bound by enclosing quantifiers, in order.
@@ -107,7 +107,7 @@ pub(crate) fn translate(
                 .cloned()
                 .zip(args.iter().cloned())
                 .collect();
-            let body = tla_syntax::substitute(&definition.body, &replacements)
+            let body = tlaplus_syntax::substitute(&definition.body, &replacements)
                 .map_err(|e| Error(e.to_string()))?;
             nested(&body, module)?
         }

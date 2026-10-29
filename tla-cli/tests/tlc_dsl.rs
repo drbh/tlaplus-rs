@@ -223,7 +223,7 @@ fn river_refinement_obligations_agree_with_tlc() {
         ),
     ] {
         let temp = tempfile::tempdir().unwrap();
-        let artifact = tla_dsl::compile(&source).unwrap();
+        let artifact = tlaplus_dsl::compile(&source).unwrap();
         std::fs::write(temp.path().join("RiverCrossing.tla"), artifact.tla).unwrap();
         std::fs::write(temp.path().join("RiverCrossing.cfg"), artifact.config).unwrap();
         let tlc = Command::new(&java)
@@ -290,7 +290,7 @@ fn composition_and_contract_exports_agree_with_tlc() {
         (composition.into(), true, "4 distinct states found"),
     ] {
         let temp = tempfile::tempdir().unwrap();
-        let artifact = tla_dsl::compile(&source).unwrap();
+        let artifact = tlaplus_dsl::compile(&source).unwrap();
         std::fs::write(
             temp.path().join(format!("{}.tla", artifact.module)),
             artifact.tla,
@@ -358,7 +358,7 @@ fn typed_diehard_exports_agree_with_tlc() {
         ),
     ] {
         let temp = tempfile::tempdir().unwrap();
-        let artifact = tla_dsl::compile(&source).unwrap();
+        let artifact = tlaplus_dsl::compile(&source).unwrap();
         std::fs::write(temp.path().join("DieHardTyped.tla"), artifact.tla).unwrap();
         std::fs::write(temp.path().join("DieHardTyped.cfg"), artifact.config).unwrap();
         let tlc = Command::new(&java)

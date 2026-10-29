@@ -1,9 +1,11 @@
 [package]
-name = "tla-observe"
+name = "tlaplus-observe"
 version.workspace = true
 edition.workspace = true
-publish.workspace = true
+description = "Timing and trace instrumentation for tlaplus-rs"
+license.workspace = true
+repository.workspace = true
 
 [dependencies]
-tla-engine = { path = "../tla-engine" }
+tlaplus-engine = { path = "../tla-engine", version = "0.1.0" }
 serde_json = "1"

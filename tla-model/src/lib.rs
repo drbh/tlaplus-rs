@@ -5,12 +5,12 @@
 mod constants;
 mod generate;
 pub use constants::materialize as materialize_constants;
-use tla_engine::{Transition, TransitionSystem};
-use tla_eval::{BooleanContext, Evaluator};
-pub use tla_eval::{Error, Value, literal};
-use tla_ir::{ExprId, Program};
+use tlaplus_engine::{Transition, TransitionSystem};
+use tlaplus_eval::{BooleanContext, Evaluator};
+pub use tlaplus_eval::{Error, Value, literal};
+use tlaplus_ir::{ExprId, Program};
 
-pub type State = tla_engine::Leveled<Vec<Value>>;
+pub type State = tlaplus_engine::Leveled<Vec<Value>>;
 
 /// A lowered program with its constants bound, ready to generate states.
 /// `program` and `constants` are fixed after binding; `checks` says what to
@@ -27,12 +27,12 @@ pub struct BoundModel {
 /// random streams, the string table and the clock.
 #[derive(Clone, Debug)]
 pub struct Runtime {
-    pub caches: tla_eval::Caches,
-    pub registers: tla_eval::Registers,
+    pub caches: tlaplus_eval::Caches,
+    pub registers: tlaplus_eval::Registers,
     pub randomized: bool,
-    pub random: tla_eval::RandomSessions,
+    pub random: tlaplus_eval::RandomSessions,
     pub started: std::time::Instant,
-    pub strings: tla_eval::Strings,
+    pub strings: tlaplus_eval::Strings,
 }
 
 /// What a configuration asks the checker to explore and verify, as
@@ -79,7 +79,7 @@ impl BoundModel {
         value: Value,
         context: BooleanContext,
     ) -> Result<bool, Error> {
-        Ok(tla_eval::boolean(&value, context, self.program.source(id))?)
+        Ok(tlaplus_eval::boolean(&value, context, self.program.source(id))?)
     }
     pub(crate) fn evaluator<'a>(
         &'a self,
@@ -150,10 +150,10 @@ impl BoundModel {
     pub fn new(program: Program) -> Self {
         Self {
             runtime: Runtime {
-                caches: tla_eval::Caches::default(),
-                registers: tla_eval::Registers::default(),
+                caches: tlaplus_eval::Caches::default(),
+                registers: tlaplus_eval::Registers::default(),
                 randomized: program.uses_random(0..program.nodes.len()),
-                random: tla_eval::RandomSessions::new(1, tla_eval::Random::new(1)),
+                random: tlaplus_eval::RandomSessions::new(1, tlaplus_eval::Random::new(1)),
                 started: std::time::Instant::now(),
                 strings: std::sync::Arc::new(std::sync::Mutex::new(program.strings.clone())),
             },
@@ -193,7 +193,7 @@ impl BoundModel {
         Ok(())
     }
     pub fn cache_constants(&mut self, operators: std::ops::Range<usize>) -> Result<(), Error> {
-        use tla_ir::{Expr, Level};
+        use tlaplus_ir::{Expr, Level};
         for index in operators {
             let operator = self
                 .program
@@ -207,7 +207,7 @@ impl BoundModel {
                 .get(body)
                 .ok_or_else(|| Error("invalid constant body".into()))?;
             // TLC cannot evaluate checker registers or the level before checking starts.
-            let runtime = [tla_ir::Builtin::TlcGet, tla_ir::Builtin::TlcGetOrDefault];
+            let runtime = [tlaplus_ir::Builtin::TlcGet, tlaplus_ir::Builtin::TlcGetOrDefault];
             if !operator.parameters.is_empty()
                 || node.level != Level::Constant
                 || self.program.uses_builtins([body], &runtime)
@@ -258,7 +258,7 @@ impl BoundModel {
         let mut fields = Vec::new();
         let mut published = std::collections::BTreeMap::new();
         for (name, count) in counts.into_iter().chain([("duration", 0), ("worker", 0)]) {
-            let key = tla_eval::intern_string(&self.runtime.strings, name.into(), true)?;
+            let key = tlaplus_eval::intern_string(&self.runtime.strings, name.into(), true)?;
             fields.push((key, int(count)));
             published.insert(name.to_owned(), int(count));
         }
@@ -271,7 +271,7 @@ impl BoundModel {
     /// Publishes `_POSSIBLE` counts as TLC's `_Possible` module reads them:
     /// `TLCGet("all:named")["s:_possible"]`, one record per worker.
     pub fn publish_possible(&self, counts: &[(String, usize)]) -> Result<(), Error> {
-        let string = |text: &str| tla_eval::intern_string(&self.runtime.strings, text.into(), true);
+        let string = |text: &str| tlaplus_eval::intern_string(&self.runtime.strings, text.into(), true);
         let fields = counts
             .iter()
             .map(|(name, n)| {
@@ -291,11 +291,11 @@ impl BoundModel {
     }
     /// Seeds random operators as TLC's `-seed` does before any evaluation.
     pub fn seed(&mut self, seed: i64) {
-        self.runtime.random = tla_eval::RandomSessions::new(seed, tla_eval::Random::new(seed));
+        self.runtime.random = tlaplus_eval::RandomSessions::new(seed, tlaplus_eval::Random::new(seed));
     }
     pub fn set_random_seed(&mut self, seed: i64, state: u64) -> Result<(), Error> {
         self.runtime.random =
-            tla_eval::RandomSessions::new(seed, tla_eval::Random::from_seed_state(state)?);
+            tlaplus_eval::RandomSessions::new(seed, tlaplus_eval::Random::from_seed_state(state)?);
         Ok(())
     }
     fn begin_successors(&self, state: &State) -> Result<(), Error> {
@@ -305,7 +305,7 @@ impl BoundModel {
         let polynomial = self
             .program
             .fingerprint_polynomial
-            .unwrap_or(tla_ir::DEFAULT_FINGERPRINT_POLYNOMIAL);
+            .unwrap_or(tlaplus_ir::DEFAULT_FINGERPRINT_POLYNOMIAL);
         let fingerprint = self.key(state)?.iter().fold(polynomial, |fp, value| {
             value.extend_fingerprint(fp, polynomial)
         });
@@ -369,7 +369,7 @@ impl BoundModel {
                 .chain(self.checks.state_constraints.iter().copied())
                 .chain(self.checks.action_constraints.iter().copied())
                 .chain(self.checks.view),
-            &[tla_ir::Builtin::TlcSet],
+            &[tlaplus_ir::Builtin::TlcSet],
         )
     }
 }

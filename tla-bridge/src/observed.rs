@@ -13,7 +13,7 @@ pub enum ObserveError {
     /// The faithful port rejected features of the specification.
     Unsupported(Vec<String>),
     /// The run's messages could not be read as answers.
-    Oracle(tla_oracle::Error),
+    Oracle(tlaplus_oracle::Error),
     /// A recorded message lacks or mangles a parameter.
     Record(String),
 }
@@ -31,8 +31,8 @@ impl fmt::Display for ObserveError {
 
 impl std::error::Error for ObserveError {}
 
-impl From<tla_oracle::Error> for ObserveError {
-    fn from(e: tla_oracle::Error) -> Self {
+impl From<tlaplus_oracle::Error> for ObserveError {
+    fn from(e: tlaplus_oracle::Error) -> Self {
         Self::Oracle(e)
     }
 }
@@ -52,7 +52,7 @@ pub fn run_faithful(args: Vec<String>, env: RunEnv) -> Result<Answers, ObserveEr
     )?)
 }
 
-pub use tla_oracle::{
+pub use tlaplus_oracle::{
     Counterexample, ErrorCategory, ObservedRun, Property, PropertyKind, PropertyObservation,
     ReportedState, RunError, TraceEnd, Verdict,
 };

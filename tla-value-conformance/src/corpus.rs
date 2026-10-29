@@ -1,6 +1,6 @@
 use crate::syntax::{Expr, Failure, parse};
 use std::{collections::BTreeMap, path::Path};
-use tla_bridge::values::with_value_session;
+use tlaplus_bridge::values::with_value_session;
 
 fn evaluate(args: &[Expr]) -> Result<String, Failure> {
     let value = || args[1].eval();

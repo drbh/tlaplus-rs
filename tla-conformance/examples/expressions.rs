@@ -5,8 +5,8 @@ use std::{
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
-use tla_bridge::{ModelRequest, with_model};
-use tla_eval::{Evaluator, Random};
+use tlaplus_bridge::{ModelRequest, with_model};
+use tlaplus_eval::{Evaluator, Random};
 #[derive(Deserialize)]
 struct Case {
     id: String,
@@ -495,7 +495,7 @@ mod tests {
                     );
                 }
                 "UnknownText" => {
-                    assert_eq!(expected.unwrap(), tla_eval::Value::Bool(false));
+                    assert_eq!(expected.unwrap(), tlaplus_eval::Value::Bool(false));
                     assert!(
                         actual
                             .unwrap_err()

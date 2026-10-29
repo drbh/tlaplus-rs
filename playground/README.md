@@ -102,7 +102,7 @@ npm run build                  # type-check + production client bundle
 npm run preview                # serve bundle AND local checker adapter
 npx playwright install chromium
 npm test                       # with dev/preview running on 7821
-cargo test --manifest-path ../Cargo.toml -p tla-playground
+cargo test --manifest-path ../Cargo.toml -p tlaplus-playground
 ```
 
 The default `npm run build` uses the native adapter; use `npm run build:browser`

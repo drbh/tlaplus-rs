@@ -1,9 +1,9 @@
 use crate::{Error, Liveness};
 use std::num::NonZeroUsize;
-use tla_engine::Report;
-use tla_model::{BoundModel, State};
-use tla_props::Check;
-use tla_temporal::Instantiated;
+use tlaplus_engine::Report;
+use tlaplus_model::{BoundModel, State};
+use tlaplus_props::Check;
+use tlaplus_temporal::Instantiated;
 
 /// Checks each temporal property in order, stopping at the first violation.
 pub fn check(
@@ -11,20 +11,20 @@ pub fn check(
     report: &Report<State>,
     live: &Instantiated,
 ) -> Result<Vec<(String, Liveness)>, Error> {
-    let graph = tla_temporal::behavior::build(model, report, &live.atoms)?;
+    let graph = tlaplus_temporal::behavior::build(model, report, &live.atoms)?;
     let mut verdicts = Vec::new();
     for (name, property) in &live.properties {
-        match tla_props::check(
+        match tlaplus_props::check(
             &graph,
             &live.assumptions,
             property,
             NonZeroUsize::new(1_000_000).unwrap(),
         )
-        .map_err(tla_temporal::Error::Search)?
+        .map_err(tlaplus_temporal::Error::Search)?
         {
             Check::Holds { .. } => verdicts.push((name.clone(), Liveness::Holds)),
             Check::Violated { lasso, .. } => {
-                if !tla_temporal::behavior::validate(
+                if !tlaplus_temporal::behavior::validate(
                     model,
                     report,
                     &graph,
@@ -33,7 +33,7 @@ pub fn check(
                     &live.assumptions,
                     property,
                 )? {
-                    return Err(tla_temporal::Error::InconsistentReport(
+                    return Err(tlaplus_temporal::Error::InconsistentReport(
                         "invalid liveness counterexample",
                     )
                     .into());
@@ -55,7 +55,7 @@ pub fn check(
                 return Ok(verdicts);
             }
             Check::StateLimit { .. } => {
-                return Err(tla_temporal::Error::ProductLimit.into());
+                return Err(tlaplus_temporal::Error::ProductLimit.into());
             }
         }
     }
@@ -67,7 +67,7 @@ pub fn check(
 pub fn possible_counts(
     model: &BoundModel,
     report: &Report<State>,
-    predicates: &[(String, tla_ir::ExprId)],
+    predicates: &[(String, tlaplus_ir::ExprId)],
 ) -> Result<Vec<(String, usize)>, Error> {
     let holds = |from: &State, to: &State, id| -> Result<bool, Error> {
         Ok(model
@@ -78,7 +78,7 @@ pub fn possible_counts(
     for (name, id) in predicates {
         let mut count = 0;
         // TLC counts every generated state or step, including revisits.
-        let state = model.program.nodes[*id].level <= tla_ir::Level::State;
+        let state = model.program.nodes[*id].level <= tlaplus_ir::Level::State;
         for node in report.nodes.iter().filter(|n| n.parent.is_none()) {
             if state {
                 count += usize::from(holds(&node.state, &node.state, *id)?);
@@ -101,7 +101,7 @@ pub fn possible_counts(
 pub fn unwitnessed(
     model: &BoundModel,
     report: &Report<State>,
-    predicates: &[(String, tla_ir::ExprId)],
+    predicates: &[(String, tlaplus_ir::ExprId)],
 ) -> Result<Option<String>, Error> {
     let counts = possible_counts(model, report, predicates)?;
     Ok(counts

@@ -1,5 +1,5 @@
-use tla_eval::{Error, Evaluator, Value};
-use tla_ir::{ExprId, Program};
+use tlaplus_eval::{Error, Evaluator, Value};
+use tlaplus_ir::{ExprId, Program};
 
 pub fn materialize(program: &Program, bindings: &[(usize, ExprId)]) -> Result<Vec<Value>, Error> {
     let strings = std::sync::Arc::new(std::sync::Mutex::new(program.strings.clone()));
@@ -16,7 +16,7 @@ pub fn materialize_with(
     mut evaluate: impl FnMut(&[Value], ExprId) -> Result<Value, Error>,
 ) -> Result<Vec<Value>, Error> {
     use std::collections::BTreeSet;
-    use tla_ir::Expr;
+    use tlaplus_ir::Expr;
     let mut pending = std::collections::BTreeMap::new();
     for &(slot, expression) in bindings {
         if slot >= program.constants.len() || pending.insert(slot, expression).is_some() {
@@ -108,7 +108,7 @@ pub fn configure(
     mut evaluate: impl FnMut(&Program, &[Value], ExprId) -> Result<Value, Error>,
 ) -> Result<Vec<Value>, Error> {
     use std::collections::BTreeMap;
-    use tla_ir::{Expr, Level, Operator};
+    use tlaplus_ir::{Expr, Level, Operator};
     if overrides.is_empty() {
         return materialize_with(program, bindings, |values, expression| {
             evaluate(program, values, expression)
@@ -162,7 +162,7 @@ pub fn configure(
             .map_or(expression, |(_, body)| *body);
         let value = evaluate(program, values, body)?;
         if let Some(&(operator, _)) = bodies.get(&expression) {
-            let body = program.push(Expr::Literal(tla_eval::literal(&value)), Level::Constant);
+            let body = program.push(Expr::Literal(tlaplus_eval::literal(&value)), Level::Constant);
             program.operators[operator].body = body;
         }
         Ok(value)

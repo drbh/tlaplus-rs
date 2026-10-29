@@ -1,9 +1,9 @@
 use std::num::NonZeroUsize;
-use tla_engine::{Options, explore};
-use tla_ir::{Builtin as B, Expr, Level as L, Literal, Program};
-use tla_model::BoundModel;
-use tla_props::{Check, Formula};
-use tla_temporal::behavior::{Atom, build, validate};
+use tlaplus_engine::{Options, explore};
+use tlaplus_ir::{Builtin as B, Expr, Level as L, Literal, Program};
+use tlaplus_model::BoundModel;
+use tlaplus_props::{Check, Formula};
+use tlaplus_temporal::behavior::{Atom, build, validate};
 
 fn model() -> (BoundModel, Vec<Atom>) {
     let mut p = Program::default();
@@ -95,7 +95,7 @@ fn replays_stuttering_counterexample_and_checks_fairness() {
     let graph = build(&model, &report, &atoms).unwrap();
     let property = Formula::atom(0).eventually();
     let limit = NonZeroUsize::new(1000).unwrap();
-    let Check::Violated { lasso, .. } = tla_props::check(&graph, &[], &property, limit).unwrap()
+    let Check::Violated { lasso, .. } = tlaplus_props::check(&graph, &[], &property, limit).unwrap()
     else {
         panic!("stuttering violates eventuality")
     };
@@ -114,7 +114,7 @@ fn replays_stuttering_counterexample_and_checks_fairness() {
         .unwrap()
     );
     assert!(matches!(
-        tla_props::check(&graph, &[fairness], &property, limit).unwrap(),
+        tlaplus_props::check(&graph, &[fairness], &property, limit).unwrap(),
         Check::Holds { .. }
     ));
 }
@@ -133,7 +133,7 @@ fn forged_labels_and_states_fail_evaluator_replay() {
     let mut graph = build(&model, &report, &atoms).unwrap();
     let property = Formula::atom(0).always();
     let Check::Violated { lasso, .. } =
-        tla_props::check(&graph, &[], &property, NonZeroUsize::new(1000).unwrap()).unwrap()
+        tlaplus_props::check(&graph, &[], &property, NonZeroUsize::new(1000).unwrap()).unwrap()
     else {
         panic!("initial x is zero")
     };
@@ -142,6 +142,6 @@ fn forged_labels_and_states_fail_evaluator_replay() {
     graph.edges[id].atoms.insert(999);
     assert!(!validate(&model, &report, &graph, &lasso, &atoms, &[], &property).unwrap());
     graph.edges[id].atoms.remove(&999);
-    report.nodes[lasso.initial].state[0] = tla_model::Value::Int(77);
+    report.nodes[lasso.initial].state[0] = tlaplus_model::Value::Int(77);
     assert!(!validate(&model, &report, &graph, &lasso, &atoms, &[], &property).unwrap());
 }

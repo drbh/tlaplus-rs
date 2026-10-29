@@ -1,8 +1,9 @@
 [package]
-name = "tla-engine"
+name = "tlaplus-engine"
 version.workspace = true
 edition.workspace = true
-publish.workspace = true
+license.workspace = true
+repository.workspace = true
 description = "Exact breadth-first exploration of transition systems"
 
 [dependencies]

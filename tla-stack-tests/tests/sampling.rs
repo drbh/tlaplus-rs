@@ -1,9 +1,9 @@
 use std::{path::PathBuf, sync::Mutex};
-use tla_bridge::{ModelRequest, with_model};
-use tla_eval::Evaluator;
-use tla_random::Random;
-use tla_value_expr::Expr;
-use tla_values::{Error, Value};
+use tlaplus_bridge::{ModelRequest, with_model};
+use tlaplus_eval::Evaluator;
+use tlaplus_random::Random;
+use tlaplus_value_expr::Expr;
+use tlaplus_values::{Error, Value};
 
 #[test]
 fn model_setup_snapshot_survives_inspection_and_repeated_initialization() {

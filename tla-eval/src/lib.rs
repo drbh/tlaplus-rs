@@ -11,20 +11,20 @@ use std::{
     collections::BTreeMap,
     sync::{Arc, Mutex},
 };
-pub use tla_library::{BooleanContext, Error, boolean, literal};
-pub use tla_random::{Random, Sessions as RandomSessions};
-pub use tla_runtime::{Cache, Caches, Registers};
+pub use tlaplus_library::{BooleanContext, Error, boolean, literal};
+pub use tlaplus_random::{Random, Sessions as RandomSessions};
+pub use tlaplus_runtime::{Cache, Caches, Registers};
 pub type Strings = Arc<Mutex<BTreeMap<String, u32>>>;
 pub type Enabled<'a> = dyn Fn(ExprId, &[Option<Value>]) -> Result<bool, Error> + 'a;
-use tla_ir::{Builtin, Expr, ExprId, Program};
-pub use tla_values::{SetExpr, Value};
+use tlaplus_ir::{Builtin, Expr, ExprId, Program};
+pub use tlaplus_values::{SetExpr, Value};
 
 #[derive(Clone)]
 pub struct Evaluator<'a> {
     pub cache: Arc<Cache>,
     pub worker: Option<usize>,
     pub registers: Option<&'a Registers>,
-    pub random: Option<&'a Mutex<tla_random::Random>>,
+    pub random: Option<&'a Mutex<tlaplus_random::Random>>,
     pub started: std::time::Instant,
     pub level: usize,
     pub intern_new_strings: bool,
@@ -83,7 +83,7 @@ impl<'a> Evaluator<'a> {
         self.strings = strings;
         self
     }
-    pub fn evaluate_runtime(&self, id: ExprId) -> Result<tla_value_expr::Expr, Error> {
+    pub fn evaluate_runtime(&self, id: ExprId) -> Result<tlaplus_value_expr::Expr, Error> {
         deferred::runtime(self, id, &mut Vec::new(), 0)
     }
     pub fn evaluate(&self, id: ExprId) -> Result<Value, Error> {
@@ -100,7 +100,7 @@ impl<'a> Evaluator<'a> {
     ) -> Result<Value, Error> {
         stacker::maybe_grow(64 * 1024, 2 * 1024 * 1024, || {
             self.eval_inner(id, locals, depth)
-                .map_err(|error| Error(tla_library::contextual_error(self.program, id, error.0)))
+                .map_err(|error| Error(tlaplus_library::contextual_error(self.program, id, error.0)))
         })
     }
     fn if_guard(&self, id: ExprId, value: Value) -> Result<bool, Error> {
@@ -241,11 +241,11 @@ impl<'a> Evaluator<'a> {
                 if let Some(value) = self.string_sequence(*op, &values)? {
                     return Ok(value);
                 }
-                tla_library::validate_method_args(
+                tlaplus_library::validate_method_args(
                     self.program.methods.get(&id).map(String::as_str),
                     &values,
                 )?;
-                tla_library::apply_builtin(*op, values)
+                tlaplus_library::apply_builtin(*op, values)
             }
             Expr::Quantify {
                 kind,

@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use tla_value_expr::{Error, Expr, FunctionKind, InfiniteSet, SetOp, Value};
+use tlaplus_value_expr::{Error, Expr, FunctionKind, InfiniteSet, SetOp, Value};
 fn int(n: i32) -> Expr {
     Expr::atom(Value::Int(n))
 }
@@ -47,11 +47,11 @@ fn union_enumeration_checks_both_operands_before_equality() {
 fn record_and_product_enumeration_preserve_error_order() {
     let records = Expr::Records(vec![
         (
-            tla_value_expr::Atom::new("a", 2),
+            tlaplus_value_expr::Atom::new("a", 2),
             Expr::Infinite(InfiniteSet::Integers),
         ),
         (
-            tla_value_expr::Atom::new("z", 1),
+            tlaplus_value_expr::Atom::new("z", 1),
             Expr::Infinite(InfiniteSet::Strings),
         ),
     ]);

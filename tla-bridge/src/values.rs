@@ -2,13 +2,13 @@
 //! faithful values.
 
 use crate::model::{self, ModelError};
-pub use tla_model::literal;
-pub use tla_oracle::ValueKey;
+pub use tlaplus_model::literal;
+pub use tlaplus_oracle::ValueKey;
 use tla_tlc_value::{TlcError, Value};
 
-pub fn from_faithful(value: &Value) -> Result<tla_values::Value, TlcError> {
-    use tla_values::Value as New;
-    let map_error = |e: tla_values::Error| TlcError::runtime(e.to_string());
+pub fn from_faithful(value: &Value) -> Result<tlaplus_values::Value, TlcError> {
+    use tlaplus_values::Value as New;
+    let map_error = |e: tlaplus_values::Error| TlcError::runtime(e.to_string());
     value.deep_normalize()?;
     Ok(match value {
         Value::Bool(v) => New::Bool(*v),
@@ -40,8 +40,8 @@ pub fn from_faithful(value: &Value) -> Result<tla_values::Value, TlcError> {
     })
 }
 
-pub fn to_faithful(value: &tla_values::Value) -> Result<Value, TlcError> {
-    use tla_values::Value as New;
+pub fn to_faithful(value: &tlaplus_values::Value) -> Result<Value, TlcError> {
+    use tlaplus_values::Value as New;
     Ok(match value {
         New::Bool(v) => Value::Bool(*v),
         New::Int(v) => Value::Int(*v),
@@ -71,7 +71,7 @@ pub fn to_faithful(value: &tla_values::Value) -> Result<Value, TlcError> {
     })
 }
 
-pub fn intern_value(text: &str, model: bool) -> Result<tla_values::Value, TlcError> {
+pub fn intern_value(text: &str, model: bool) -> Result<tlaplus_values::Value, TlcError> {
     from_faithful(&if model {
         tla_tlc_value::value::mv_make(text)
     } else {
@@ -124,7 +124,7 @@ pub(crate) fn value_key(value: &Value) -> Result<ValueKey, TlcError> {
 
 pub(crate) fn operator_table(
     table: &tla_tlc_value::value::OpRcdValue,
-) -> Result<tla_ir::Literal, ModelError> {
+) -> Result<tlaplus_ir::Literal, ModelError> {
     let convert = |value: &tla_tlc_value::Value| {
         from_faithful(value)
             .map(|value| literal(&value))
@@ -136,7 +136,7 @@ pub(crate) fn operator_table(
         .zip(table.values())
         .map(|(args, value)| {
             let args = args.iter().map(convert).collect::<Result<_, _>>()?;
-            Ok((tla_ir::Literal::Tuple(args), convert(&value)?))
+            Ok((tlaplus_ir::Literal::Tuple(args), convert(&value)?))
         })
         .collect::<Result<Vec<_>, ModelError>>()?;
     let mut unique = Vec::new();
@@ -145,5 +145,5 @@ pub(crate) fn operator_table(
             unique.push(entry);
         }
     }
-    Ok(tla_ir::Literal::Function(unique))
+    Ok(tlaplus_ir::Literal::Function(unique))
 }

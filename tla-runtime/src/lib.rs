@@ -9,8 +9,8 @@ use std::{
         atomic::{AtomicUsize, Ordering},
     },
 };
-use tla_value_expr::Expr;
-use tla_values::Value;
+use tlaplus_value_expr::Expr;
+use tlaplus_values::Value;
 
 /// Why a register or cache operation failed. TLC's own messages are kept
 /// verbatim, because specifications observe them through `TLCGet`.
@@ -31,9 +31,9 @@ pub enum Error {
     InvalidCacheMetadata,
     /// An error message exactly as TLC reports it.
     Tlc(String),
-    Value(tla_values::Error),
+    Value(tlaplus_values::Error),
     /// The expression a cache was asked to evaluate failed.
-    Evaluation(tla_library::Error),
+    Evaluation(tlaplus_library::Error),
 }
 
 impl std::fmt::Display for Error {
@@ -55,13 +55,13 @@ impl std::fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-impl From<tla_values::Error> for Error {
-    fn from(e: tla_values::Error) -> Self {
+impl From<tlaplus_values::Error> for Error {
+    fn from(e: tlaplus_values::Error) -> Self {
         Self::Value(e)
     }
 }
 
-impl From<Error> for tla_library::Error {
+impl From<Error> for tlaplus_library::Error {
     fn from(e: Error) -> Self {
         match e {
             Error::Evaluation(e) => e,
@@ -103,7 +103,7 @@ impl Clone for Registers {
 }
 
 fn rendered(value: &Value) -> Result<String, Error> {
-    Ok(tla_library::stringify(&Expr::atom(value.clone()))?)
+    Ok(tlaplus_library::stringify(&Expr::atom(value.clone()))?)
 }
 
 fn key(value: &Value, operation: &str) -> Result<Key, Error> {
@@ -374,7 +374,7 @@ impl Cache {
         metadata: &Value,
         key: Value,
         polynomial: u64,
-        evaluate: impl FnOnce() -> Result<Value, tla_library::Error>,
+        evaluate: impl FnOnce() -> Result<Value, tlaplus_library::Error>,
     ) -> Result<Value, Error> {
         let metadata = metadata.sequence()?;
         let [Value::Int(site), seed] = metadata.as_slice() else {

@@ -1,8 +1,8 @@
 use crate::deferred::runtime;
 use crate::sets::{applied, member};
 use crate::{Error, Evaluator, Value};
-use tla_ir::{Builtin, Builtin as B, Expr as Ir, ExprId, Literal};
-use tla_value_expr::Expr;
+use tlaplus_ir::{Builtin, Builtin as B, Expr as Ir, ExprId, Literal};
+use tlaplus_value_expr::Expr;
 pub(crate) const LIMIT: usize = 100_000;
 impl Evaluator<'_> {
     pub fn enumerate_with_locals(
@@ -39,7 +39,7 @@ pub(crate) fn enumerate(
     if matches!(domain, Expr::Infinite(_) | Expr::Sequences(_)) {
         return Err(Error(format!(
             "non-enumerable domain: {}",
-            tla_library::stringify(&domain)?
+            tlaplus_library::stringify(&domain)?
         )));
     }
     let values = domain
@@ -52,12 +52,12 @@ pub(crate) fn enumerate(
 
 pub(crate) fn invoke(
     evaluator: &crate::Evaluator<'_>,
-    function: tla_ir::ExprId,
+    function: tlaplus_ir::ExprId,
     values: Vec<Value>,
     locals: &[Option<Value>],
     depth: usize,
 ) -> Result<Value, Error> {
-    let tla_ir::Expr::Lambda { parameters, body } = &evaluator.program.nodes[function].expr else {
+    let tlaplus_ir::Expr::Lambda { parameters, body } = &evaluator.program.nodes[function].expr else {
         return Err(Error("expected operator argument".into()));
     };
     if parameters.len() != values.len() {
@@ -72,8 +72,8 @@ pub(crate) fn invoke(
 
 pub(crate) fn sequence_operator(
     evaluator: &crate::Evaluator<'_>,
-    expression: &tla_ir::Expr,
-    args: &[tla_ir::ExprId],
+    expression: &tlaplus_ir::Expr,
+    args: &[tlaplus_ir::ExprId],
     locals: &mut Vec<Option<Value>>,
     depth: usize,
 ) -> Result<Value, Error> {
@@ -87,14 +87,14 @@ pub(crate) fn sequence_operator(
         let value = runtime(evaluator, args[1], locals, depth + 1)?;
         return Err(Error(format!(
             "The second argument of SortSeq should be a operator, but instead it is:\n{}",
-            tla_library::stringify(&value)?
+            tlaplus_library::stringify(&value)?
         )));
     }
     let mut output = Vec::new();
     for value in input {
         if matches!(
             expression,
-            tla_ir::Expr::Apply {
+            tlaplus_ir::Expr::Apply {
                 op: Builtin::SelectSeq,
                 ..
             }
@@ -180,7 +180,7 @@ pub(crate) fn projected(
                 && !runtime(evaluator, *domain, &mut captures, depth + 1)?.contains(&argument)?
             {
                 let value = runtime(evaluator, function, &mut captures, depth + 1)?;
-                return Err(Error(tla_library::function_domain_error(
+                return Err(Error(tlaplus_library::function_domain_error(
                     &value, &argument,
                 )?));
             }
@@ -193,7 +193,7 @@ pub(crate) fn projected(
 }
 
 pub fn materialize(literal: &Literal) -> Result<Value, Error> {
-    tla_library::materialize(literal)
+    tlaplus_library::materialize(literal)
 }
 
 pub(crate) fn deferred_operator(
@@ -217,7 +217,7 @@ pub(crate) fn deferred_operator(
             size: None,
         });
     }
-    tla_library::stringify(&values[0])?;
+    tlaplus_library::stringify(&values[0])?;
     Ok(if op == B::PrintT {
         Expr::Canonical(Value::Bool(true))
     } else {
@@ -237,7 +237,7 @@ pub(crate) fn assert_error(
     let Err(error) = evaluator.eval(body, locals, depth + 1) else {
         return Ok(Value::Bool(false));
     };
-    let actual = tla_library::faithful_error_text(&error.0).ok_or_else(|| {
+    let actual = tlaplus_library::faithful_error_text(&error.0).ok_or_else(|| {
         Error(format!(
             "AssertError cannot compare this error text: {error}"
         ))

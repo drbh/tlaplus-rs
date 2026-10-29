@@ -4,9 +4,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use serde_json::Value;
-use tla_oracle::corpus::{Corpus, compare_corpora};
-use tla_oracle::tool::{Message, extract_messages, parse_stream};
-use tla_oracle::{Answers, Comparison, Mode, Outcome, compare};
+use tlaplus_oracle::corpus::{Corpus, compare_corpora};
+use tlaplus_oracle::tool::{Message, extract_messages, parse_stream};
+use tlaplus_oracle::{Answers, Comparison, Mode, Outcome, compare};
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tlaplus-rs-explore")

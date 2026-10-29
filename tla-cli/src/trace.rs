@@ -2,7 +2,7 @@
 //! changes.
 
 use std::io::IsTerminal;
-use tla_checker::{BoundModel, State, Value, Violation, ViolationKind as K};
+use tlaplus_checker::{BoundModel, State, Value, Violation, ViolationKind as K};
 
 /// How traces are drawn: TLA+ ASCII or mathematical symbols, and whether to
 /// color changed values (on a terminal, unless `NO_COLOR` is set).
@@ -28,7 +28,7 @@ impl Style {
 
 /// A value in TLA+ notation.
 pub fn value(value: &Value, style: Style) -> String {
-    let text = tla_value_expr::stringify(&tla_value_expr::Expr::atom(value.clone()))
+    let text = tlaplus_value_expr::stringify(&tlaplus_value_expr::Expr::atom(value.clone()))
         .unwrap_or_else(|_| format!("{value:?}"));
     if !style.unicode {
         return text;

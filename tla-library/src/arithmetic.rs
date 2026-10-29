@@ -1,8 +1,8 @@
 //! Logic, comparison and integer arithmetic.
 use crate::{BooleanContext, Error, boolean, integer, integer_comparison};
-use tla_ir::Builtin;
-use tla_value_expr::Expr;
-use tla_values::Value;
+use tlaplus_ir::Builtin;
+use tlaplus_value_expr::Expr;
+use tlaplus_values::Value;
 
 pub(crate) fn apply(op: Builtin, args: &[Value]) -> Result<Value, Error> {
     use Builtin::*;

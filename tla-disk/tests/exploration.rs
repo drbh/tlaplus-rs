@@ -1,8 +1,8 @@
 use std::{convert::Infallible, num::NonZeroUsize};
-use tla_disk::store::Store;
-use tla_disk::{Codec, CodecError, ValueCodec};
-use tla_engine::{Completion, Options, Transition, TransitionSystem, ViolationKind};
-use tla_values::Value;
+use tlaplus_disk::store::Store;
+use tlaplus_disk::{Codec, CodecError, ValueCodec};
+use tlaplus_engine::{Completion, Options, Transition, TransitionSystem, ViolationKind};
+use tlaplus_values::Value;
 
 struct Graph {
     size: usize,
@@ -76,17 +76,17 @@ fn disk_bfs_matches_memory_counts_depth_and_shortest_witnesses() {
             max_states: cap,
             ..Options::default()
         };
-        let expected = tla_engine::explore(&graph, &options).unwrap();
+        let expected = tlaplus_engine::explore(&graph, &options).unwrap();
         let dir = tempfile::tempdir().unwrap();
         let store = Store::open(
             dir.path().join("states.redb"),
             NonZeroUsize::new(32 << 10).unwrap(),
         )
         .unwrap();
-        let actual = tla_disk::explore(&graph, &Numbers, &store, &options).unwrap();
+        let actual = tlaplus_disk::explore(&graph, &Numbers, &store, &options).unwrap();
         assert_eq!(actual.completion, expected.completion);
         if let Completion::Violated(violation) = actual.completion {
-            assert!(tla_engine::validate_trace(&graph, &violation).unwrap());
+            assert!(tlaplus_engine::validate_trace(&graph, &violation).unwrap());
         } else {
             assert_eq!(actual.distinct as usize, expected.nodes.len());
             assert_eq!(actual.statistics.depth, expected.statistics.depth);
@@ -136,8 +136,8 @@ fn first_violation_precedes_later_deadlock_or_error() {
         let dir = tempfile::tempdir().unwrap();
         let store =
             Store::open(dir.path().join("s.redb"), NonZeroUsize::new(4096).unwrap()).unwrap();
-        let report = tla_disk::explore(&system, &Numbers, &store, &Options::default()).unwrap();
-        let memory = tla_engine::explore(&system, &Options::default()).unwrap();
+        let report = tlaplus_disk::explore(&system, &Numbers, &store, &Options::default()).unwrap();
+        let memory = tlaplus_engine::explore(&system, &Options::default()).unwrap();
         assert_eq!(report.completion, memory.completion);
         assert_eq!(report.statistics.generated, 3);
         let Completion::Violated(v) = report.completion else {
@@ -212,7 +212,7 @@ fn disk_limit_stops_streaming_initial_generation() {
         NonZeroUsize::new(4096).unwrap(),
     )
     .unwrap();
-    let report = tla_disk::explore(
+    let report = tlaplus_disk::explore(
         &Streaming,
         &Numbers,
         &store,
@@ -229,9 +229,9 @@ fn disk_limit_stops_streaming_initial_generation() {
 
 #[test]
 fn state_codec_preserves_depth_without_changing_identity() {
-    use tla_disk::{Codec, StateCodec};
-    let state = tla_engine::Leveled {
-        values: vec![tla_values::Value::Int(7)],
+    use tlaplus_disk::{Codec, StateCodec};
+    let state = tlaplus_engine::Leveled {
+        values: vec![tlaplus_values::Value::Int(7)],
         depth: 42,
     };
     let bytes = StateCodec.state(&state).unwrap();

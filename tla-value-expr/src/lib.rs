@@ -5,7 +5,7 @@ mod functions;
 pub use functions::{quoted, stringify};
 mod sets;
 use std::cmp::Ordering;
-pub use tla_values::{Atom, Error, Value};
+pub use tlaplus_values::{Atom, Error, Value};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FunctionKind {

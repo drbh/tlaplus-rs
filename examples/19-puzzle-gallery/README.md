@@ -4,7 +4,7 @@ Nine small models demonstrate Boolean reasoning, arithmetic, spatial planning,
 and practical scheduling. Open them in the playground's example selector, or run:
 
 ```sh
-cargo run -p tla-cli -- examples/19-puzzle-gallery/BridgeAndTorch.tsl
+cargo run -p tlaplus-cli -- examples/19-puzzle-gallery/BridgeAndTorch.tsl
 ```
 
 Each default model deliberately violates `NoSolution` or `NotSolved` (exit code
@@ -87,9 +87,9 @@ validate the completed Sudoku and schedules, and check the tighter infeasible
 budgets. Optional TLC tests check all nine exports plus the two infeasible cases:
 
 ```sh
-cargo test -p tla-playground --test gallery
+cargo test -p tlaplus-playground --test gallery
 JAVA=/path/to/java TLA2TOOLS_JAR=/path/to/tla2tools.jar \
-  cargo test -p tla-playground --test gallery -- --ignored
+  cargo test -p tlaplus-playground --test gallery -- --ignored
 ```
 
 The small story instances and models here are written for this repository.

@@ -9,7 +9,7 @@ use std::{
 mod config;
 pub mod temporal;
 pub use config::{Config, config, embedded_config, override_operators};
-use tla_syntax::{Expr, Module};
+use tlaplus_syntax::{Expr, Module};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Error(pub String);
@@ -22,22 +22,22 @@ impl std::error::Error for Error {}
 
 /// The standard modules, loaded like user modules when no file shadows them.
 const STANDARD: &[(&str, &str)] = &[
-    ("Bags", include_str!("../../library/Bags.tla")),
-    ("FiniteSets", include_str!("../../library/FiniteSets.tla")),
-    ("Integers", include_str!("../../library/Integers.tla")),
-    ("Json", include_str!("../../library/Json.tla")),
-    ("Naturals", include_str!("../../library/Naturals.tla")),
+    ("Bags", include_str!("../library/Bags.tla")),
+    ("FiniteSets", include_str!("../library/FiniteSets.tla")),
+    ("Integers", include_str!("../library/Integers.tla")),
+    ("Json", include_str!("../library/Json.tla")),
+    ("Naturals", include_str!("../library/Naturals.tla")),
     (
         "Randomization",
-        include_str!("../../library/Randomization.tla"),
+        include_str!("../library/Randomization.tla"),
     ),
-    ("Reals", include_str!("../../library/Reals.tla")),
-    ("RealTime", include_str!("../../library/RealTime.tla")),
-    ("Sequences", include_str!("../../library/Sequences.tla")),
-    ("TLAPS", include_str!("../../library/TLAPS.tla")),
-    ("TLC", include_str!("../../library/TLC.tla")),
-    ("TLCExt", include_str!("../../library/TLCExt.tla")),
-    ("Toolbox", include_str!("../../library/Toolbox.tla")),
+    ("Reals", include_str!("../library/Reals.tla")),
+    ("RealTime", include_str!("../library/RealTime.tla")),
+    ("Sequences", include_str!("../library/Sequences.tla")),
+    ("TLAPS", include_str!("../library/TLAPS.tla")),
+    ("TLC", include_str!("../library/TLC.tla")),
+    ("TLCExt", include_str!("../library/TLCExt.tla")),
+    ("Toolbox", include_str!("../library/Toolbox.tla")),
 ];
 
 /// CommunityModules whose operators TLC may implement natively.
@@ -78,7 +78,7 @@ pub fn load(path: &Path, search: &[PathBuf]) -> Result<Module, Error> {
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or_default();
-    let module = tla_parser::module(&text).map_err(|e| Error(format!("{name}: {e}")))?;
+    let module = tlaplus_parser::module(&text).map_err(|e| Error(format!("{name}: {e}")))?;
     loader.visit(name, module, false)
 }
 
@@ -117,11 +117,11 @@ impl Loader {
                 let text = std::fs::read_to_string(&file)
                     .map_err(|e| Error(format!("{}: {e}", file.display())))?;
                 let module =
-                    tla_parser::module(&text).map_err(|e| Error(format!("{name}: {e}")))?;
+                    tlaplus_parser::module(&text).map_err(|e| Error(format!("{name}: {e}")))?;
                 self.visit(name, module, COMMUNITY.contains(&name))?
             }
             (None, Some((_, text))) => {
-                let module = tla_parser::module(text).map_err(|e| Error(format!("{name}: {e}")))?;
+                let module = tlaplus_parser::module(text).map_err(|e| Error(format!("{name}: {e}")))?;
                 self.visit(name, module, true)?
             }
             (None, None) => return Err(Error(format!("module {name} not found"))),
@@ -157,7 +157,7 @@ impl Loader {
             for definition in parent.definitions {
                 if let Some(existing) = inherited
                     .iter()
-                    .find(|d: &&tla_syntax::Definition| d.name == definition.name)
+                    .find(|d: &&tlaplus_syntax::Definition| d.name == definition.name)
                 {
                     if *existing != definition {
                         return Err(Error(format!(
@@ -204,7 +204,7 @@ impl Loader {
                 .chain(module.constants.iter().cloned())
                 .filter(|name| !own.contains(name))
                 .collect();
-            tla_syntax::check_scopes(
+            tlaplus_syntax::check_scopes(
                 &module.definitions,
                 &module.assumptions,
                 &module.declared_at,
@@ -220,8 +220,8 @@ impl Loader {
     fn instantiate(
         &mut self,
         module: &mut Module,
-        inherited: &mut Vec<tla_syntax::Definition>,
-        instance: tla_syntax::Instance,
+        inherited: &mut Vec<tlaplus_syntax::Definition>,
+        instance: tlaplus_syntax::Instance,
         parent: Module,
     ) -> Result<(), Error> {
         let mut replacements = BTreeMap::new();
@@ -283,7 +283,7 @@ impl Loader {
                 }
                 return Err(Error(format!("duplicate instantiated operator {name}")));
             }
-            let mut definition = tla_syntax::substitute_definition(&definition, &replacements)
+            let mut definition = tlaplus_syntax::substitute_definition(&definition, &replacements)
                 .map_err(|e| Error(e.to_string()))?;
             definition.name = name;
             definition
@@ -299,7 +299,7 @@ impl Loader {
         }
         for assumption in parent.assumptions {
             module.assumptions.push(
-                tla_syntax::substitute(&assumption, &replacements)
+                tlaplus_syntax::substitute(&assumption, &replacements)
                     .map_err(|e| Error(e.to_string()))?,
             );
         }
@@ -317,7 +317,7 @@ fn imported(mut module: Module) -> Result<Module, Error> {
         .map(|name| (name.clone(), Expr::Name(format!("{}@{name}", module.name))))
         .collect();
     for definition in &mut module.definitions {
-        let mut renamed = tla_syntax::substitute_definition(definition, &replacements)
+        let mut renamed = tlaplus_syntax::substitute_definition(definition, &replacements)
             .map_err(|e| Error(e.to_string()))?;
         if module.local_names.contains(&definition.name) {
             renamed.name = format!("{}@{}", module.name, definition.name);
@@ -327,7 +327,7 @@ fn imported(mut module: Module) -> Result<Module, Error> {
     module.assumptions = module
         .assumptions
         .iter()
-        .map(|a| tla_syntax::substitute(a, &replacements).map_err(|e| Error(e.to_string())))
+        .map(|a| tlaplus_syntax::substitute(a, &replacements).map_err(|e| Error(e.to_string())))
         .collect::<Result<_, _>>()?;
     module.local_names.clear();
     Ok(module)

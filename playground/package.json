@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "checker": "cargo build --manifest-path ../Cargo.toml -p tla-playground",
+    "checker": "cargo build --manifest-path ../Cargo.toml -p tlaplus-playground",
     "dev": "npm run checker && vite --host 127.0.0.1",
     "build": "svelte-check && vite build",
     "check": "svelte-check",

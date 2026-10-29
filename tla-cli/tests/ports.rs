@@ -203,7 +203,7 @@ fn typed_diehard_preserves_the_puzzle_and_distinguishes_jugs() {
 
     // Struct identity is checked statically, even though both have gallons.
     let swapped = source.replace("next small = SmallJug", "next small = LargeJug");
-    assert!(tla_dsl::compile(&swapped).is_err());
+    assert!(tlaplus_dsl::compile(&swapped).is_err());
 
     let dir = tempfile::tempdir().unwrap();
     let temporary = dir.path().join("DieHardTyped.tsl");

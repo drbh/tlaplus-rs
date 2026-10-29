@@ -5,7 +5,7 @@ use forms::{
     bound_nonfix_op, cartesian_product, case, choose, except, function_literal, lambda, let_in,
     prefixed_op, record_literal, set_map, subexpression, unbounded_quantification,
 };
-use tla_syntax::{Diagnostic, Expr};
+use tlaplus_syntax::{Diagnostic, Expr};
 use tree_sitter::Node;
 
 /// The expression in `node`'s field `name`.

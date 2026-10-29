@@ -1,11 +1,13 @@
 [package]
-name = "tla-library"
+name = "tlaplus-library"
 version.workspace = true
 edition.workspace = true
-publish.workspace = true
+description = "Standard-library operators for tlaplus-rs"
+license.workspace = true
+repository.workspace = true
 
 [dependencies]
-tla-ir = { path = "../tla-ir" }
-tla-values = { path = "../tla-values" }
-tla-value-expr = { path = "../tla-value-expr" }
+tlaplus-ir = { path = "../tla-ir", version = "0.1.0" }
+tlaplus-values = { path = "../tla-values", version = "0.1.0" }
+tlaplus-value-expr = { path = "../tla-value-expr", version = "0.1.0" }
 

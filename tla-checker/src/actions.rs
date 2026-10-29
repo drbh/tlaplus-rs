@@ -1,6 +1,6 @@
 //! Splits the next-state relation into named actions so every step of a
 //! counterexample can be labeled with the action that took it.
-use tla_ir::{Builtin as B, Expr, ExprId, Level, Program, Quantifier};
+use tlaplus_ir::{Builtin as B, Expr, ExprId, Level, Program, Quantifier};
 
 /// Splits the next-state relation into its disjuncts, as TLC does, so every
 /// step can be labeled with the action that took it. The union of the parts

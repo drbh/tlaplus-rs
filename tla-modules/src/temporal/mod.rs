@@ -7,7 +7,7 @@ pub use template::Template;
 
 use crate::{Config, Error};
 use std::collections::BTreeSet;
-use tla_syntax::{Definition, Expr, Module};
+use tlaplus_syntax::{Definition, Expr, Module};
 
 /// A specification's decomposition. Predicates are added to the module as
 /// definitions named here; temporal formulas are instantiated once constants
@@ -159,7 +159,7 @@ pub(crate) fn expand(module: &Module, expression: &Expr) -> Result<Expr, Error> 
             .cloned()
             .zip(args.iter().cloned())
             .collect();
-        expression = tla_syntax::substitute(&definition.body, &replacements)
+        expression = tlaplus_syntax::substitute(&definition.body, &replacements)
             .map_err(|e| Error(e.to_string()))?;
     }
 }

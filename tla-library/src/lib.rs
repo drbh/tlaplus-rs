@@ -18,7 +18,7 @@ pub use text::{
     subsequence_range, validate_method_args,
 };
 
-pub use tla_values::Value;
+pub use tlaplus_values::Value;
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Error(pub String);
 impl std::fmt::Display for Error {
@@ -27,12 +27,12 @@ impl std::fmt::Display for Error {
     }
 }
 impl std::error::Error for Error {}
-impl From<tla_values::Error> for Error {
-    fn from(error: tla_values::Error) -> Self {
+impl From<tlaplus_values::Error> for Error {
+    fn from(error: tlaplus_values::Error) -> Self {
         Self(error.to_string())
     }
 }
-use tla_ir::{Builtin, Literal};
+use tlaplus_ir::{Builtin, Literal};
 
 /// Applies a built-in operator to already evaluated operands.
 pub fn apply_builtin(op: Builtin, args: Vec<Value>) -> Result<Value, Error> {
@@ -133,8 +133,8 @@ pub fn materialize(literal: &Literal) -> Result<Value, Error> {
     })
 }
 
-pub fn runtime_literal(literal: &Literal) -> Result<tla_value_expr::Expr, Error> {
-    use tla_value_expr::{Expr, FunctionKind};
+pub fn runtime_literal(literal: &Literal) -> Result<tlaplus_value_expr::Expr, Error> {
+    use tlaplus_value_expr::{Expr, FunctionKind};
     Ok(match literal {
         Literal::Set(values) => Expr::Set(
             values

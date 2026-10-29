@@ -45,7 +45,7 @@ that the correct higher ballot sometimes inherits Red. TLC checks the generated
 TLA+ too and agrees on the correct state count and broken invariant.
 
 ```sh
-cargo test -p tla-playground --test paxos
+cargo test -p tlaplus-playground --test paxos
 JAVA=/path/to/java TLA2TOOLS_JAR=/path/to/tla2tools.jar \
-  cargo test -p tla-playground --test paxos -- --ignored
+  cargo test -p tlaplus-playground --test paxos -- --ignored
 ```

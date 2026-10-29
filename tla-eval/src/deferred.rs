@@ -1,8 +1,8 @@
 use crate::functional::with_binding;
 use crate::sets::{applied, member};
 use crate::{Error, Evaluator, Value, bind};
-use tla_ir::{Builtin as B, Expr as Ir, ExprId};
-use tla_value_expr::{Expr, FunctionKind, InfiniteSet, SetOp};
+use tlaplus_ir::{Builtin as B, Expr as Ir, ExprId};
+use tlaplus_value_expr::{Expr, FunctionKind, InfiniteSet, SetOp};
 const LIMIT: usize = 100_000;
 /// Checks a value bound to `slot` against the tuple pattern `id` destructures
 /// it with, if any: the value must have at least the pattern's arity, or
@@ -50,7 +50,7 @@ fn runtime_inner(
     let evaluate = |id, locals: &mut Vec<Option<Value>>| runtime(evaluator, id, locals, depth + 1);
     Ok(match &node.expr {
         Ir::Scoped { current, .. } => evaluate(*current, locals)?,
-        Ir::Literal(literal) => tla_library::runtime_literal(literal)?,
+        Ir::Literal(literal) => tlaplus_library::runtime_literal(literal)?,
         Ir::If {
             condition,
             then_expr,
@@ -195,7 +195,7 @@ pub(crate) fn query(
     let polynomial = evaluator
         .program
         .fingerprint_polynomial
-        .unwrap_or(tla_ir::DEFAULT_FINGERPRINT_POLYNOMIAL);
+        .unwrap_or(tlaplus_ir::DEFAULT_FINGERPRINT_POLYNOMIAL);
     if op == B::TlcEvalDefinition {
         // The lowering replaces every well-formed use; one that survives has no definition.
         return Err(Error("invalid TLCEvalDefinition".into()));
@@ -311,7 +311,7 @@ pub(crate) fn query(
             match op {
                 B::Eq | B::Ne => Value::Bool(a.semantic_eq(&b)? == (op == B::Eq)),
                 B::SubsetEq => Value::Bool(a.subset_of(&b, LIMIT)?),
-                _ => Value::Bool(tla_library::integer_comparison(op, &a, &b)?),
+                _ => Value::Bool(tlaplus_library::integer_comparison(op, &a, &b)?),
             }
         }
     };
@@ -385,12 +385,12 @@ fn memoized(
     // express, so they are rejected rather than silently miscached; TLC never
     // caches action or temporal bodies, so those are simply evaluated.
     match evaluator.program.nodes[*body].level {
-        tla_ir::Level::State => {
+        tlaplus_ir::Level::State => {
             return Err(Error(
                 "TLCCache of a state-level expression is not supported".into(),
             ));
         }
-        tla_ir::Level::Constant => {}
+        tlaplus_ir::Level::Constant => {}
         _ => return evaluator.eval(*body, locals, depth + 1),
     }
     // Within a site the cache keys on the closure alone.
@@ -418,12 +418,12 @@ fn text_conversion(
     let text = if op == B::ToString {
         render(evaluator, args[0], locals, depth + 1)?
     } else {
-        tla_library::json(
+        tlaplus_library::json(
             &runtime(evaluator, args[0], locals, depth + 1)?,
             match op {
-                B::ToJsonArray => tla_library::JsonMode::Array,
-                B::ToJsonObject => tla_library::JsonMode::Object,
-                _ => tla_library::JsonMode::Value,
+                B::ToJsonArray => tlaplus_library::JsonMode::Array,
+                B::ToJsonObject => tlaplus_library::JsonMode::Object,
+                _ => tlaplus_library::JsonMode::Value,
             },
         )?
     };
@@ -478,7 +478,7 @@ fn render(
             ),
             Ir::Function { domain, body, .. } | Ir::RecursiveFunction { domain, body, .. } => {
                 match runtime(evaluator, id, locals, depth + 1)
-                    .and_then(|v| tla_library::stringify(&v).map_err(Error::from))
+                    .and_then(|v| tlaplus_library::stringify(&v).map_err(Error::from))
                 {
                     Ok(text) => Ok(text),
                     Err(_error) => {
@@ -495,7 +495,7 @@ fn render(
                         let domain = match domain {
                             Some(domain) => match builtin_set_name(evaluator.program, *domain) {
                                 Some(name) => name.into(),
-                                None => tla_library::stringify(&runtime(
+                                None => tlaplus_library::stringify(&runtime(
                                     evaluator,
                                     *domain,
                                     locals,
@@ -510,7 +510,7 @@ fn render(
                     }
                 }
             }
-            _ => Ok(tla_library::stringify(&runtime(
+            _ => Ok(tlaplus_library::stringify(&runtime(
                 evaluator,
                 id,
                 locals,
@@ -521,7 +521,7 @@ fn render(
 }
 
 /// The name of a built-in infinite set, for messages that cannot enumerate it.
-fn builtin_set_name(program: &tla_ir::Program, id: ExprId) -> Option<&'static str> {
+fn builtin_set_name(program: &tlaplus_ir::Program, id: ExprId) -> Option<&'static str> {
     match &program.nodes[id].expr {
         Ir::Apply {
             op: B::Naturals,

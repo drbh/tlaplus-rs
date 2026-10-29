@@ -1,10 +1,12 @@
 [package]
-name = "tla-parser"
+name = "tlaplus-parser"
 version.workspace = true
 edition.workspace = true
-publish.workspace = true
+description = "TLA+ parser for tlaplus-rs, built on tree-sitter"
+license.workspace = true
+repository.workspace = true
 
 [dependencies]
 tree-sitter = "0.25"
 tree-sitter-tlaplus = "1.5"
-tla-syntax = { path = "../tla-syntax" }
+tlaplus-syntax = { path = "../tla-syntax", version = "0.1.0" }

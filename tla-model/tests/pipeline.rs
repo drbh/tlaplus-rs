@@ -1,9 +1,9 @@
 use std::num::NonZeroUsize;
-use tla_engine::{
+use tlaplus_engine::{
     Completion, Options, TransitionSystem, explore, explore_parallel, validate_trace,
 };
-use tla_ir::{Builtin as B, Expr, Level, Literal, Program};
-use tla_model::{BoundModel, Value};
+use tlaplus_ir::{Builtin as B, Expr, Level, Literal, Program};
+use tlaplus_model::{BoundModel, Value};
 
 fn counter() -> BoundModel {
     let mut p = Program {
@@ -269,11 +269,11 @@ fn computed_constants_follow_dependencies_and_reject_cycles() {
         Level::Constant,
     );
     assert_eq!(
-        tla_model::materialize_constants(&program, &[(0, sum), (1, one)]).unwrap(),
+        tlaplus_model::materialize_constants(&program, &[(0, sum), (1, one)]).unwrap(),
         vec![Value::Int(2), Value::Int(1)]
     );
-    assert!(tla_model::materialize_constants(&program, &[(0, b), (1, a)]).is_err());
-    assert!(tla_model::materialize_constants(&program, &[(0, one)]).is_err());
+    assert!(tlaplus_model::materialize_constants(&program, &[(0, b), (1, a)]).is_err());
+    assert!(tlaplus_model::materialize_constants(&program, &[(0, one)]).is_err());
 }
 
 #[test]
@@ -377,7 +377,7 @@ fn enabled_checks_partial_actions_without_applying_model_constraints() {
         },
         Level::State,
     );
-    model.program.operators.push(tla_ir::Operator {
+    model.program.operators.push(tlaplus_ir::Operator {
         name: "Captured".into(),
         parameters: vec![0],
         body: enabled,

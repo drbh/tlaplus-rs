@@ -2,11 +2,11 @@ pub mod support;
 
 use serde::{Deserialize, Serialize};
 use std::{fs, num::NonZeroUsize, time::Duration};
-use tla_bridge::{values::ValueKey, with_register_model as with_model};
-use tla_conformance::{Case, Execution, Request, execute_suite};
-use tla_engine::{explore, explore_parallel};
-use tla_model::State;
-use tla_observe::{Diagnosed, Failure};
+use tlaplus_bridge::{values::ValueKey, with_register_model as with_model};
+use tlaplus_conformance::{Case, Execution, Request, execute_suite};
+use tlaplus_engine::{explore, explore_parallel};
+use tlaplus_model::State;
+use tlaplus_observe::{Diagnosed, Failure};
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 struct StateKey {
@@ -49,7 +49,7 @@ impl Measurement {
 }
 use support::{key, rejection};
 
-fn native(error: Failure<State, tla_model::Error>) -> Result<Witness, String> {
+fn native(error: Failure<State, tlaplus_model::Error>) -> Result<Witness, String> {
     let state = |state: State| -> Result<StateKey, String> {
         Ok(StateKey {
             level: i32::try_from(state.depth).map_err(|e| e.to_string())?,
@@ -69,7 +69,7 @@ fn measure(request: Request) -> Result<Comparison, String> {
     let (request, options) = support::configuration(&request)?;
     let (model, options, expected) = with_model(request, move |faithful| {
         let model = faithful.lower()?;
-        let options = tla_engine::Options {
+        let options = tlaplus_engine::Options {
             check_deadlock: options.check_deadlock && faithful.info().check_deadlock,
             ..options
         };
@@ -77,7 +77,7 @@ fn measure(request: Request) -> Result<Comparison, String> {
             Err(failure) => failure,
             Ok(_) => return Ok((model, options, None)),
         };
-        let state = |s: tla_bridge::model::State<'_>| -> Result<_, tla_bridge::ModelError> {
+        let state = |s: tlaplus_bridge::model::State<'_>| -> Result<_, tlaplus_bridge::ModelError> {
             Ok(StateKey {
                 level: s.level(),
                 values: faithful.state_values(&s)?,

@@ -270,7 +270,7 @@ fn gallery_exports_agree_with_tlc() {
         0,
     ));
     for (name, source, code) in cases {
-        let artifact = tla_dsl::compile(&source).unwrap();
+        let artifact = tlaplus_dsl::compile(&source).unwrap();
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join(format!("{name}.tla")), artifact.tla).unwrap();
         std::fs::write(dir.path().join(format!("{name}.cfg")), artifact.config).unwrap();

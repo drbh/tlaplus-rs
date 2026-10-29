@@ -1,6 +1,6 @@
 use std::{convert::Infallible, num::NonZeroUsize};
-use tla_engine::{Options, Transition, TransitionSystem, explore_parallel};
-use tla_observe::Timeline;
+use tlaplus_engine::{Options, Transition, TransitionSystem, explore_parallel};
+use tlaplus_observe::Timeline;
 struct Graph;
 impl TransitionSystem for Graph {
     type State = usize;

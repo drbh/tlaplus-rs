@@ -5,7 +5,7 @@ existing checker. Every original `.tla` example has a `.tsl` counterpart beside
 it: see the [18-pair comparison index](../README.md#modern-syntax-comparisons).
 
 ```sh
-cargo build -p tla-cli
+cargo build -p tlaplus-cli
 target/debug/tla examples/03-invariants/Duplicates.tsl
 target/debug/tla examples/08-race/Race.tsl
 target/debug/tla --check examples/15-modules/Point.tsl
@@ -334,7 +334,7 @@ Repeat that comparison with:
 ```sh
 JAVA=/absolute/path/to/java \
 TLA2TOOLS_JAR=/absolute/path/to/tla2tools.jar \
-cargo test -p tla-cli --test tlc_dsl -- --ignored
+cargo test -p tlaplus-cli --test tlc_dsl -- --ignored
 ```
 
 The tests compare verdicts and complete successful state counts. Partial counts

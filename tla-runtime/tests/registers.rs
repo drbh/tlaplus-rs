@@ -1,6 +1,6 @@
 use std::num::NonZeroUsize;
-use tla_runtime::Registers;
-use tla_values::Value;
+use tlaplus_runtime::Registers;
+use tlaplus_values::Value;
 
 #[test]
 fn initialization_broadcasts_and_workers_keep_separate_values() {
@@ -56,7 +56,7 @@ fn run_boundaries_and_clones_do_not_leak_registers() {
     registers.start(NonZeroUsize::MIN).unwrap();
     assert_eq!(
         registers.get(None, &index),
-        Err(tla_runtime::Error::Undefined("0".into()))
+        Err(tlaplus_runtime::Error::Undefined("0".into()))
     );
     assert!(registers.set(Some(1), &index, Value::Int(1)).is_err());
     assert!(registers.get(Some(1), &index).is_err());
@@ -76,7 +76,7 @@ fn run_boundaries_and_clones_do_not_leak_registers() {
     );
     assert_eq!(
         registers.get(None, &Value::string("nosuch", 2)),
-        Err(tla_runtime::Error::Undefined("nosuch".into()))
+        Err(tlaplus_runtime::Error::Undefined("nosuch".into()))
     );
     assert!(
         registers
@@ -203,7 +203,7 @@ fn all_register_views_use_worker_zero_keys_and_preserve_named_ordinals() {
         registers.set(Some(0), &key, Value::Bool(true)).unwrap();
         assert_eq!(
             registers.get(None, query),
-            Err(tla_runtime::Error::Tlc(
+            Err(tlaplus_runtime::Error::Tlc(
                 "java.lang.NullPointerException".into()
             ))
         );
@@ -213,7 +213,7 @@ fn all_register_views_use_worker_zero_keys_and_preserve_named_ordinals() {
 #[test]
 fn caches_preserve_setup_isolate_sites_and_retry_failed_computations() {
     use std::cell::Cell;
-    use tla_runtime::Caches;
+    use tlaplus_runtime::Caches;
     let mut caches = Caches::default();
     let count = Cell::new(0);
     let metadata = |site| {
@@ -230,7 +230,7 @@ fn caches_preserve_setup_isolate_sites_and_retry_failed_computations() {
             || {
                 count.set(count.get() + 1);
                 if fail {
-                    Err(tla_library::Error("failure".into()))
+                    Err(tlaplus_library::Error("failure".into()))
                 } else {
                     Ok(Value::Int(count.get()))
                 }
@@ -244,7 +244,7 @@ fn caches_preserve_setup_isolate_sites_and_retry_failed_computations() {
     assert_eq!(evaluate(&caches, 2, 1, false), Ok(Value::Int(2)));
     assert_eq!(
         evaluate(&caches, 1, 2, true),
-        Err(tla_runtime::Error::Evaluation(tla_library::Error(
+        Err(tlaplus_runtime::Error::Evaluation(tlaplus_library::Error(
             "failure".into()
         )))
     );

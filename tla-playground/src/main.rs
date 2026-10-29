@@ -3,7 +3,7 @@ mod render;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::{num::NonZeroUsize, path::Path};
-use tla_checker::{Bound, Settings};
+use tlaplus_checker::{Bound, Settings};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -26,7 +26,7 @@ fn execute(request: Request) -> Result<Value, Value> {
     let dir = tempfile::tempdir().map_err(|e| error(e.to_string()))?;
     let (module, source, config, artifact) = match request.language.as_str() {
         "tsl" => {
-            let artifact = tla_dsl::compile(&request.source).map_err(|e| {
+            let artifact = tlaplus_dsl::compile(&request.source).map_err(|e| {
                 json!({
                     "status":"error", "message":e.message,
                     "location":{"line":e.location.line,"column":e.location.column}
@@ -45,7 +45,7 @@ fn execute(request: Request) -> Result<Value, Value> {
             )
         }
         "tla" => {
-            let parsed = tla_parser::module(&request.source).map_err(|e| error(e.to_string()))?;
+            let parsed = tlaplus_parser::module(&request.source).map_err(|e| error(e.to_string()))?;
             (parsed.name, request.source, request.config, None)
         }
         _ => return Err(error("Language must be tsl or tla".into())),
@@ -62,12 +62,12 @@ fn execute(request: Request) -> Result<Value, Value> {
     if !config.trim().is_empty() {
         std::fs::write(path.with_extension("cfg"), &config).map_err(|e| error(e.to_string()))?;
     }
-    let loaded = tla_checker::load(&path, None, &[], None).map_err(|e| error(e.to_string()))?;
+    let loaded = tlaplus_checker::load(&path, None, &[], None).map_err(|e| error(e.to_string()))?;
     let settings = Settings {
         max_states: NonZeroUsize::new(request.max_states.clamp(1, 2000)),
         ..Settings::default()
     };
-    let mut checker = match tla_checker::bind(loaded, settings).map_err(|e| error(e.to_string()))? {
+    let mut checker = match tlaplus_checker::bind(loaded, settings).map_err(|e| error(e.to_string()))? {
         Bound::AssumptionViolated => {
             return Ok(
                 json!({"status":"assumption", "message":"An ASSUME is false; no states explored."}),

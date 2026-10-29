@@ -1,5 +1,5 @@
 use std::{cell::Cell, marker::PhantomData};
-use tla_engine::TransitionSystem;
+use tlaplus_engine::TransitionSystem;
 use tla_sany_semantic::NodeId;
 use tla_tlc_eval::{NamedAction, TlcState, context::Context};
 use tla_tlc_value::{TlcError, Value};
@@ -21,9 +21,9 @@ impl Model {
     pub fn validate_safety_records(
         &self,
         records: &[(i64, ValueKey)],
-        kind: &tla_engine::ViolationKind,
+        kind: &tlaplus_engine::ViolationKind,
     ) -> Result<bool, ModelError> {
-        use tla_engine::ViolationKind;
+        use tlaplus_engine::ViolationKind;
         if records.is_empty()
             || records
                 .iter()
@@ -106,8 +106,8 @@ impl Model {
 
     /// The faithful session adapter cannot be used by the parallel evaluator.
     /// ```compile_fail
-    /// tla_bridge::with_model(tla_bridge::ModelRequest::new("Counter.tla"), |model| {
-    ///     tla_engine::explore_parallel(&model.system()?, &Default::default(),
+    /// tlaplus_bridge::with_model(tlaplus_bridge::ModelRequest::new("Counter.tla"), |model| {
+    ///     tlaplus_engine::explore_parallel(&model.system()?, &Default::default(),
     ///         std::num::NonZeroUsize::new(2).unwrap())?;
     ///     Ok(())
     /// });
@@ -227,12 +227,12 @@ impl<'model> TransitionSystem for System<'model> {
     fn successors(
         &self,
         state: &Self::State,
-    ) -> Result<Vec<tla_engine::Transition<Self::State>>, Self::Error> {
+    ) -> Result<Vec<tlaplus_engine::Transition<Self::State>>, Self::Error> {
         self.model
             .successors(state)?
             .into_iter()
             .map(|transition| {
-                Ok(tla_engine::Transition {
+                Ok(tlaplus_engine::Transition {
                     action: usize::try_from(transition.action.0).map_err(|_| {
                         ModelError::message(Stage::Successors, "negative action identifier")
                     })?,
@@ -251,7 +251,7 @@ impl<'model> TransitionSystem for System<'model> {
     fn visit_successors(
         &self,
         state: &Self::State,
-        out: &mut impl FnMut(tla_engine::Transition<Self::State>) -> VisitResult,
+        out: &mut impl FnMut(tlaplus_engine::Transition<Self::State>) -> VisitResult,
     ) -> VisitResult {
         self.model.owns(state)?;
         self.model.begin_successors(state)?;
@@ -262,7 +262,7 @@ impl<'model> TransitionSystem for System<'model> {
             let mut visit = Visit::new(|mut raw: TlcState| {
                 raw.set_predecessor(&state.raw);
                 raw.set_action(Some(action.id));
-                out(tla_engine::Transition {
+                out(tlaplus_engine::Transition {
                     action: id,
                     state: self.model.complete_state(raw, Stage::Successors)?,
                 })

@@ -2,8 +2,8 @@ use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
 };
-use tla_bridge::values::{from_faithful, intern_value, to_faithful, with_value_session};
-use tla_values::Value;
+use tlaplus_bridge::values::{from_faithful, intern_value, to_faithful, with_value_session};
+use tlaplus_values::Value;
 
 fn random(seed: &mut u64) -> u64 {
     *seed ^= *seed << 13;

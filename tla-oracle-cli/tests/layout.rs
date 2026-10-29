@@ -26,13 +26,13 @@ fn workspace_crates_respect_dependency_rules() {
             .unwrap()
             .join("tlaplus-rs-explore/crates");
         for dependency in package["dependencies"].as_array().unwrap() {
-            if dependency["name"] == "tla-bridge" && dependency["kind"] != "dev" {
+            if dependency["name"] == "tlaplus-bridge" && dependency["kind"] != "dev" {
                 violations.push(format!(
                     "{}: tla-bridge must be a dev-dependency",
                     package["name"]
                 ));
             }
-            if package["name"] != "tla-bridge"
+            if package["name"] != "tlaplus-bridge"
                 && dependency["path"]
                     .as_str()
                     .is_some_and(|path| Path::new(path).starts_with(&faithful))

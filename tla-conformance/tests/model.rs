@@ -2,9 +2,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
-use tla_bridge::model::{ModelInfo, Stage, StateSnapshot};
-use tla_bridge::recording as mp;
-use tla_bridge::{ModelRequest, Outcome, RunEnv, run_faithful, with_model};
+use tlaplus_bridge::model::{ModelInfo, Stage, StateSnapshot};
+use tlaplus_bridge::recording as mp;
+use tlaplus_bridge::{ModelRequest, Outcome, RunEnv, run_faithful, with_model};
 
 const COUNTER: &str = include_str!("../../tests/fixtures/Counter.tla");
 
@@ -362,7 +362,7 @@ fn failed_assumptions_and_invalid_loads_do_not_enter_callback_or_poison_next_loa
         let dir = fixture("Bad", spec, cfg);
         let error = with_model(
             ModelRequest::new(dir.path().join("Bad.tla")),
-            |_| -> Result<(), tla_bridge::ModelError> { panic!("callback after rejected model") },
+            |_| -> Result<(), tlaplus_bridge::ModelError> { panic!("callback after rejected model") },
         )
         .unwrap_err();
         assert_eq!(error.stage, stage, "{error}");
@@ -445,7 +445,7 @@ fn callback_panic_cleans_up_and_nested_oracle_calls_fail_without_deadlocking() {
     assert!(
         std::panic::catch_unwind(|| with_model(
             panicking,
-            |_| -> Result<(), tla_bridge::ModelError> { panic!("test callback panic") }
+            |_| -> Result<(), tlaplus_bridge::ModelError> { panic!("test callback panic") }
         ))
         .is_err()
     );

@@ -1,5 +1,5 @@
-use tla_eval::{Evaluator, Value};
-use tla_ir::{Builtin as B, Expr, Level, Literal, Program, Quantifier};
+use tlaplus_eval::{Evaluator, Value};
+use tlaplus_ir::{Builtin as B, Expr, Level, Literal, Program, Quantifier};
 
 fn literal(program: &mut Program, n: i32) -> usize {
     program.push(Expr::Literal(Literal::Int(n)), Level::Constant)
@@ -171,7 +171,7 @@ fn lazy_membership_and_canonical_local_values_preserve_semantics() {
     let local = p.push(Expr::Local(0), Level::Constant);
     let empty = apply(&mut p, B::Tuple, vec![]);
     let equal = apply(&mut p, B::Eq, vec![local, empty]);
-    p.operators.push(tla_ir::Operator {
+    p.operators.push(tlaplus_ir::Operator {
         name: "Empty".into(),
         parameters: vec![0],
         body: equal,
@@ -297,7 +297,7 @@ fn substitution_rebinds_captures_inside_recursive_operator_bodies() {
     let ten = literal(&mut p, 10);
     let done = apply(&mut p, B::Eq, vec![argument, zero]);
     let decrement = apply(&mut p, B::Sub, vec![argument, one]);
-    p.operators.push(tla_ir::Operator {
+    p.operators.push(tlaplus_ir::Operator {
         name: "fold".into(),
         parameters: vec![1],
         body: zero,
@@ -347,11 +347,11 @@ fn injectivity_checks_function_ranges() {
     for (values, expected) in [(vec![], true), (vec![1, 2], true), (vec![1, 1], false)] {
         let function = Value::tuple(values.into_iter().map(Value::Int).collect());
         assert_eq!(
-            tla_library::apply_builtin(B::IsInjective, vec![function]).unwrap(),
+            tlaplus_library::apply_builtin(B::IsInjective, vec![function]).unwrap(),
             Value::Bool(expected)
         );
     }
-    assert!(tla_library::apply_builtin(B::IsInjective, vec![Value::Int(1)]).is_err());
+    assert!(tlaplus_library::apply_builtin(B::IsInjective, vec![Value::Int(1)]).is_err());
 }
 
 #[test]

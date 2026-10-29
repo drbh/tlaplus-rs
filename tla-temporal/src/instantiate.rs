@@ -1,9 +1,9 @@
 use crate::{Error, behavior::Atom};
 use std::collections::HashMap;
-use tla_ir::{Expr, ExprId, Level};
-use tla_model::{BoundModel, Value};
-use tla_modules::temporal::{Template, Temporal};
-use tla_props::Formula;
+use tlaplus_ir::{Expr, ExprId, Level};
+use tlaplus_model::{BoundModel, Value};
+use tlaplus_modules::temporal::{Template, Temporal};
+use tlaplus_props::Formula;
 
 /// Temporal formulas over atoms that are IR predicates of the configured model.
 pub struct Instantiated {
@@ -74,13 +74,13 @@ impl Builder<'_> {
                 let domain = self
                     .model
                     .evaluate(domain, &[], &[])
-                    .map_err(|e| tla_model::Error(format!("temporal quantifier domain: {e}")))?;
+                    .map_err(|e| tlaplus_model::Error(format!("temporal quantifier domain: {e}")))?;
                 let mut result = if *universal {
                     Formula::True
                 } else {
                     Formula::False
                 };
-                for value in domain.elements().map_err(tla_model::Error::from)? {
+                for value in domain.elements().map_err(tlaplus_model::Error::from)? {
                     values.push(value.clone());
                     let formula = self.formula(body, values);
                     values.pop();
@@ -117,7 +117,7 @@ impl Builder<'_> {
         let level = program.nodes[program.operators[operator].body].level;
         let args = values
             .iter()
-            .map(|v| program.push(Expr::Literal(tla_model::literal(v)), Level::Constant))
+            .map(|v| program.push(Expr::Literal(tlaplus_model::literal(v)), Level::Constant))
             .collect();
         Ok(program.push(Expr::Call { operator, args }, level))
     }

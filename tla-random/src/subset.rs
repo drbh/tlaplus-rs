@@ -1,8 +1,8 @@
 use crate::Random;
 use num_bigint::BigInt;
 use std::sync::OnceLock;
-use tla_value_expr::Expr;
-use tla_values::{Error, Value};
+use tlaplus_value_expr::Expr;
+use tlaplus_values::{Error, Value};
 
 fn factors(mut value: i32) -> Vec<i32> {
     let mut result = Vec::new();

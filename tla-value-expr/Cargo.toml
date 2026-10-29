@@ -1,9 +1,11 @@
 [package]
-name = "tla-value-expr"
+name = "tlaplus-value-expr"
 version.workspace = true
 edition.workspace = true
-publish.workspace = true
+description = "Deferred set and function expressions over TLA+ values"
+license.workspace = true
+repository.workspace = true
 
 [dependencies]
-tla-values = { path = "../tla-values" }
+tlaplus-values = { path = "../tla-values", version = "0.1.0" }
 serde_json = "1"

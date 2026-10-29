@@ -1,9 +1,9 @@
 //! TLC's own operators: evaluation hooks, model values, assertions, tuple
 //! patterns, printing and the clock.
 use crate::{Error, stringify};
-use tla_ir::Builtin;
-use tla_value_expr::Expr;
-use tla_values::Value;
+use tlaplus_ir::Builtin;
+use tlaplus_value_expr::Expr;
+use tlaplus_values::Value;
 
 /// `Print`, `PrintT` and `JavaTime`, which take their operands as given.
 pub(crate) fn effect(op: Builtin, args: Vec<Value>) -> Result<Value, Error> {

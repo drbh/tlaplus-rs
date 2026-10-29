@@ -1,13 +1,15 @@
 [package]
-name = "tla-disk"
+name = "tlaplus-disk"
 version.workspace = true
 edition.workspace = true
-publish.workspace = true
+description = "Disk-backed exploration and persistent storage for tlaplus-rs"
+license.workspace = true
+repository.workspace = true
 
 [dependencies]
-tla-engine = { path = "../tla-engine" }
+tlaplus-engine = { path = "../tla-engine", version = "0.1.0" }
 redb = "4.3"
-tla-values = { path = "../tla-values" }
+tlaplus-values = { path = "../tla-values", version = "0.1.0" }
 
 [dev-dependencies]
 tempfile = "3"

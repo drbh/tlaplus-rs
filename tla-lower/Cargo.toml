@@ -1,10 +1,12 @@
 [package]
-name = "tla-lower"
+name = "tlaplus-lower"
 version.workspace = true
 edition.workspace = true
-publish.workspace = true
+description = "Lowering from TLA+ syntax to the tlaplus-rs IR"
+license.workspace = true
+repository.workspace = true
 
 [dependencies]
-tla-syntax = { path = "../tla-syntax" }
-tla-ir = { path = "../tla-ir" }
-tla-modules = { path = "../tla-modules" }
+tlaplus-syntax = { path = "../tla-syntax", version = "0.1.0" }
+tlaplus-ir = { path = "../tla-ir", version = "0.1.0" }
+tlaplus-modules = { path = "../tla-modules", version = "0.1.0" }

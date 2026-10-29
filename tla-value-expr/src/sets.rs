@@ -1,5 +1,5 @@
 use crate::{Error, Expr, FunctionKind, InfiniteSet, SetOp, Value};
-use tla_values::{Atom, SetExpr};
+use tlaplus_values::{Atom, SetExpr};
 
 impl Expr {
     pub fn subset_of(&self, other: &Self, limit: usize) -> Result<bool, Error> {

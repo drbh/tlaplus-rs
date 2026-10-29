@@ -1,6 +1,6 @@
 use std::{num::NonZeroUsize, path::PathBuf};
-use tla_bridge::{ModelRequest, Outcome, RunEnv, observe_faithful, with_model};
-use tla_engine::{Completion, Options, explore, explore_parallel, validate_trace};
+use tlaplus_bridge::{ModelRequest, Outcome, RunEnv, observe_faithful, with_model};
+use tlaplus_engine::{Completion, Options, explore, explore_parallel, validate_trace};
 
 #[test]
 fn serial_register_execution_and_replay_match_the_faithful_driver() {
@@ -54,10 +54,10 @@ fn serial_register_execution_and_replay_match_the_faithful_driver() {
                     .iter()
                     .enumerate()
                     .map(|(index, state)| {
-                        let tla_model::Value::Int(value) = state[0] else {
+                        let tlaplus_model::Value::Int(value) = state[0] else {
                             panic!("expected integer state")
                         };
-                        use tla_bridge::values::ValueKey;
+                        use tlaplus_bridge::values::ValueKey;
                         (
                             index as i64 + 1,
                             ValueKey::Function(vec![(
@@ -70,7 +70,7 @@ fn serial_register_execution_and_replay_match_the_faithful_driver() {
                 assert_eq!(expected.typed_states, Some(Ok(trace)));
                 assert!(validate_trace(&model, violation).unwrap());
                 let mut forged = violation.clone();
-                forged.trace.states.last_mut().unwrap().values[0] = tla_model::Value::Int(99);
+                forged.trace.states.last_mut().unwrap().values[0] = tlaplus_model::Value::Int(99);
                 assert!(!validate_trace(&model, &forged).unwrap());
             } else {
                 assert_eq!(expected.summary.outcome, Outcome::Success);
@@ -90,7 +90,7 @@ fn assumption_register_writes_survive_initialization_and_repeated_runs() {
     let directory = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../tests/fixtures");
     let request = ModelRequest::new(directory.join("AssumedRegisters.tla"));
     let (mut model, (mut assumptions, expressions)) =
-        tla_bridge::with_loaded_model(request, |model| {
+        tlaplus_bridge::with_loaded_model(request, |model| {
             Ok((model.lower()?, model.lower_assumptions()?))
         })
         .unwrap();
@@ -105,7 +105,7 @@ fn assumption_register_writes_survive_initialization_and_repeated_runs() {
         .runtime
         .registers
         .restore_setup(assumptions.runtime.registers.setup_snapshot());
-    let bridged = tla_bridge::with_register_model(
+    let bridged = tlaplus_bridge::with_register_model(
         ModelRequest::new(directory.join("AssumedRegisters.tla")),
         |faithful| {
             for _ in 0..2 {
@@ -159,7 +159,7 @@ fn assumption_register_writes_survive_initialization_and_repeated_runs() {
             assert_eq!(report.completion, Completion::Complete);
             assert_eq!(report.nodes.len(), 3);
             assert_eq!(expected.summary.distinct, Some(report.nodes.len() as u64));
-            assert_eq!(report.nodes[0].state.values, vec![tla_model::Value::Int(7)]);
+            assert_eq!(report.nodes[0].state.values, vec![tlaplus_model::Value::Int(7)]);
         }
     }
 }
@@ -216,7 +216,7 @@ fn native_assumption_draws_seed_initialization_like_faithful_setup() {
     for seed in [0, 1, 42, -1] {
         let mut request = ModelRequest::new(directory.join("RandomModel.tla"));
         request.seed = seed;
-        let expected: Vec<Vec<tla_model::Value>> = with_model(request.clone(), |faithful| {
+        let expected: Vec<Vec<tlaplus_model::Value>> = with_model(request.clone(), |faithful| {
             faithful
                 .initial_states()?
                 .iter()
@@ -225,7 +225,7 @@ fn native_assumption_draws_seed_initialization_like_faithful_setup() {
         })
         .unwrap();
         let (mut model, (mut assumptions, expressions)) =
-            tla_bridge::with_loaded_model(request, |faithful| {
+            tlaplus_bridge::with_loaded_model(request, |faithful| {
                 Ok((faithful.lower()?, faithful.lower_assumptions()?))
             })
             .unwrap();
@@ -239,7 +239,7 @@ fn native_assumption_draws_seed_initialization_like_faithful_setup() {
             );
             model.runtime.random = assumptions.runtime.random.clone();
             for run in [&model, &model.clone(), &model] {
-                use tla_engine::TransitionSystem;
+                use tlaplus_engine::TransitionSystem;
                 let actual: Vec<_> = run
                     .initial_states()
                     .unwrap()
@@ -298,7 +298,7 @@ fn cached_setup_survives_faithful_inspection_native_runs_and_clones() {
     let path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../tests/fixtures/CacheRegisters.tla");
     let (mut assumptions, expressions) =
-        tla_bridge::with_loaded_model(ModelRequest::new(path.clone()), |faithful| {
+        tlaplus_bridge::with_loaded_model(ModelRequest::new(path.clone()), |faithful| {
             faithful.lower_assumptions()
         })
         .unwrap();
@@ -314,12 +314,12 @@ fn cached_setup_survives_faithful_inspection_native_runs_and_clones() {
             assumptions
                 .runtime
                 .registers
-                .get(None, &tla_model::Value::Int(1))
+                .get(None, &tlaplus_model::Value::Int(1))
                 .unwrap(),
-            tla_model::Value::Int(2)
+            tlaplus_model::Value::Int(2)
         );
     }
-    let model = tla_bridge::with_register_model(ModelRequest::new(path), |faithful| {
+    let model = tlaplus_bridge::with_register_model(ModelRequest::new(path), |faithful| {
         for _ in 0..2 {
             let report = explore(&faithful.safety_adapter(), &Options::default())?;
             assert!(matches!(report.completion, Completion::Complete));
@@ -342,9 +342,9 @@ fn cached_setup_survives_faithful_inspection_native_runs_and_clones() {
                 model
                     .runtime
                     .registers
-                    .get(None, &tla_model::Value::Int(1))
+                    .get(None, &tlaplus_model::Value::Int(1))
                     .unwrap(),
-                tla_model::Value::Int(2)
+                tlaplus_model::Value::Int(2)
             );
         }
     }

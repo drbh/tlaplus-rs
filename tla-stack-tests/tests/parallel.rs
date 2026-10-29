@@ -9,8 +9,8 @@ use std::{
     },
     thread::{self, ThreadId},
 };
-use tla_bridge::{ModelRequest, Outcome, RunEnv, observe_faithful, with_model};
-use tla_engine::{Completion, Options, Transition, TransitionSystem, explore_parallel};
+use tlaplus_bridge::{ModelRequest, Outcome, RunEnv, observe_faithful, with_model};
+use tlaplus_engine::{Completion, Options, Transition, TransitionSystem, explore_parallel};
 
 #[derive(Default)]
 struct Streaming {
@@ -181,7 +181,7 @@ fn native_worker_registers_preserve_generation_and_invariant_interleaving() {
         for x in 1..=4 {
             for y in 0..=2 {
                 assert!(report.nodes.iter().any(|node| node.state.values
-                    == vec![tla_model::Value::Int(x), tla_model::Value::Int(y)]));
+                    == vec![tlaplus_model::Value::Int(x), tlaplus_model::Value::Int(y)]));
             }
         }
     }

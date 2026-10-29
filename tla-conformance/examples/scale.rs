@@ -1,6 +1,6 @@
 use std::{convert::Infallible, hint::black_box, num::NonZeroUsize, sync::Arc, time::Instant};
-use tla_disk::{Codec, CodecError};
-use tla_engine::{Options, Transition, TransitionSystem};
+use tlaplus_disk::{Codec, CodecError};
+use tlaplus_engine::{Options, Transition, TransitionSystem};
 
 #[derive(Clone)]
 struct State {
@@ -93,19 +93,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Err("disk benchmark is serial".into());
         }
         let directory = tempfile::tempdir()?;
-        let store = tla_disk::Store::open(
+        let store = tlaplus_disk::Store::open(
             directory.path().join("states.redb"),
             NonZeroUsize::new(256 << 10).unwrap(),
         )
         .map_err(|e| e.to_string())?;
-        let report = tla_disk::explore(&model, &Encoding, &store, &options)?;
+        let report = tlaplus_disk::explore(&model, &Encoding, &store, &options)?;
         (
             report.distinct as usize,
             report.statistics.depth,
             report.statistics.generated,
         )
     } else if mode == "memory" {
-        let report = tla_engine::explore_parallel(&model, &options, workers)?;
+        let report = tlaplus_engine::explore_parallel(&model, &options, workers)?;
         (
             report.nodes.len(),
             report.statistics.depth,

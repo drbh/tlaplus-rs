@@ -1,5 +1,5 @@
-use tla_bridge::values::intern_value;
-use tla_values::{Error, SetExpr, Value};
+use tlaplus_bridge::values::intern_value;
+use tlaplus_values::{Error, SetExpr, Value};
 
 /// Why a recorded enumeration could not be read.
 #[derive(Debug)]
@@ -225,7 +225,7 @@ impl Reader<'_> {
 }
 
 pub fn observed(
-    expr: &tla_value_expr::Expr,
+    expr: &tlaplus_value_expr::Expr,
     normalized: bool,
 ) -> Result<std::collections::HashSet<Value>, Error> {
     (if normalized {

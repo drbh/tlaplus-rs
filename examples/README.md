@@ -8,7 +8,7 @@ lives in a `CONFIG` section; modern models declare constants and properties
 directly in the source.
 
 ```bash
-cargo build --release -p tla-cli
+cargo build --release -p tlaplus-cli
 ./target/release/tla examples/01-counter/Counter.tla
 ```
 

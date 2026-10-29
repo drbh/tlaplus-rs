@@ -11,7 +11,7 @@ use std::{
     thread::{self, ThreadId},
     time::{Duration, Instant},
 };
-use tla_engine::{Transition, TransitionSystem};
+use tlaplus_engine::{Transition, TransitionSystem};
 
 #[derive(Default)]
 struct Count {

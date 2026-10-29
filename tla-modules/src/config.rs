@@ -1,5 +1,5 @@
 use crate::Error;
-use tla_syntax::{Expr, Module};
+use tlaplus_syntax::{Expr, Module};
 
 #[derive(Clone, Debug, Default)]
 pub struct Config {
@@ -25,7 +25,7 @@ pub struct Config {
 }
 
 pub fn config(source: &str) -> Result<Config, Error> {
-    let tokens = tla_syntax::lex(source).map_err(|e| Error(e.to_string()))?;
+    let tokens = tlaplus_syntax::lex(source).map_err(|e| Error(e.to_string()))?;
     let mut result = Config::default();
     let mut at = 0;
     while at < tokens.len() {
@@ -150,7 +150,7 @@ pub fn config(source: &str) -> Result<Config, Error> {
                         .join(" ");
                     result.constants.push((
                         name,
-                        tla_syntax::expression(&text).map_err(|e| Error(e.to_string()))?,
+                        tlaplus_syntax::expression(&text).map_err(|e| Error(e.to_string()))?,
                     ));
                 }
             }

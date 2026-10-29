@@ -1,14 +1,18 @@
 [package]
-name = "tla-playground"
+name = "tlaplus-playground"
 version.workspace = true
 edition.workspace = true
-publish.workspace = true
+publish = false
+
+[[bin]]
+name = "tla-playground"
+path = "src/main.rs"
 
 [dependencies]
-tla-checker = { path = "../tla-checker" }
-tla-dsl = { path = "../tla-dsl" }
-tla-parser = { path = "../tla-parser" }
-tla-value-expr = { path = "../tla-value-expr" }
+tlaplus-checker = { path = "../tla-checker", version = "0.1.0" }
+tlaplus-dsl = { path = "../tla-dsl", version = "0.1.0" }
+tlaplus-parser = { path = "../tla-parser", version = "0.1.0" }
+tlaplus-value-expr = { path = "../tla-value-expr", version = "0.1.0" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tempfile = "3"

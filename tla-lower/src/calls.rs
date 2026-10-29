@@ -1,7 +1,7 @@
 use crate::{Binding, Env, Lower, Status};
-use tla_ir::{Builtin as B, Expr as I, ExprId, Level, Operator};
-use tla_modules::Error;
-use tla_syntax::{Definition, Expr};
+use tlaplus_ir::{Builtin as B, Expr as I, ExprId, Level, Operator};
+use tlaplus_modules::Error;
+use tlaplus_syntax::{Definition, Expr};
 
 /// Where a called definition lives: a LET scope, or the module.
 #[derive(Clone, Copy, PartialEq)]
@@ -403,7 +403,7 @@ impl Lower<'_> {
             .cloned()
             .zip(args.iter().cloned())
             .collect();
-        let body = tla_syntax::substitute(&definition.body, &replacements)
+        let body = tlaplus_syntax::substitute(&definition.body, &replacements)
             .map_err(|e| Error(e.to_string()))?;
         let index = match selector {
             Expr::String(colon) if colon == ":" => return Ok(body),

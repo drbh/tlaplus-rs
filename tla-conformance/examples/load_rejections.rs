@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fs, path::Path, time::Duration};
-use tla_bridge::{FaithfulArgs, FaithfulRunMode, ModelRequest, model::Stage, with_loaded_model};
-use tla_conformance::{Case, Execution, Request, execute_suite};
+use tlaplus_bridge::{FaithfulArgs, FaithfulRunMode, ModelRequest, model::Stage, with_loaded_model};
+use tlaplus_conformance::{Case, Execution, Request, execute_suite};
 
 #[derive(Debug, Deserialize, Serialize)]
 enum Observation {
@@ -15,7 +15,7 @@ struct Recording {
     module: String,
     cfg: String,
     exit_status: i32,
-    messages: Vec<tla_bridge::tool::Message>,
+    messages: Vec<tlaplus_bridge::tool::Message>,
     run: Run,
 }
 
@@ -40,15 +40,15 @@ fn expected(recording: &Recording) -> Option<Expected> {
         return None;
     }
     match (recording.exit_status, errors[0].code) {
-        (150, tla_bridge::recording::TLC_PARSING_FAILED) => Some(Expected {
-            code: tla_bridge::recording::TLC_PARSING_FAILED,
+        (150, tlaplus_bridge::recording::TLC_PARSING_FAILED) => Some(Expected {
+            code: tlaplus_bridge::recording::TLC_PARSING_FAILED,
             detail: None,
         }),
         (255, 1000) => {
             let (_, nested) = errors[0]
                 .text
                 .split_once("The exception was a tlc2.tool.ConfigFileException\n: ")?;
-            let messages = tla_bridge::tool::parse_stream(nested).ok()?;
+            let messages = tlaplus_bridge::tool::parse_stream(nested).ok()?;
             let [message] = messages.as_slice() else {
                 return None;
             };
@@ -389,7 +389,7 @@ mod tests {
     fn configuration_rejections_require_matching_exception_details() {
         let mut recording = Recording {
             module: "Spec.tla".into(), cfg: "Spec.cfg".into(), exit_status: 255,
-            messages: vec![tla_bridge::tool::Message {
+            messages: vec![tlaplus_bridge::tool::Message {
                 code: 1000, severity: 1,
                 text: "The exception was a tlc2.tool.ConfigFileException\n: @!@!@STARTMSG 5006:0 @!@!@\nconfiguration error\n@!@!@ENDMSG 5006 @!@!@".into(),
             }],
@@ -450,7 +450,7 @@ mod tests {
             module: "example.tla".into(),
             cfg: "example.cfg".into(),
             exit_status: 150,
-            messages: vec![tla_bridge::tool::Message {
+            messages: vec![tlaplus_bridge::tool::Message {
                 code: 3002,
                 severity: 1,
                 text: "Parsing or semantic analysis failed.".into(),

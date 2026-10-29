@@ -4,7 +4,7 @@ use std::fmt;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Error {
     /// Evaluating a predicate, a quantifier domain or a successor failed.
-    Evaluation(tla_model::Error),
+    Evaluation(tlaplus_model::Error),
     /// Liveness needs the complete state graph.
     IncompleteExploration,
     /// A property names a definition the program does not have.
@@ -12,7 +12,7 @@ pub enum Error {
     /// A report and the model it came from disagree.
     InconsistentReport(&'static str),
     /// The property search over the behavior graph failed.
-    Search(tla_props::Error),
+    Search(tlaplus_props::Error),
     /// The product of graph and formula grew past the configured limit.
     ProductLimit,
 }
@@ -36,14 +36,14 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-impl From<tla_model::Error> for Error {
-    fn from(e: tla_model::Error) -> Self {
+impl From<tlaplus_model::Error> for Error {
+    fn from(e: tlaplus_model::Error) -> Self {
         Self::Evaluation(e)
     }
 }
 
-impl From<tla_values::Error> for Error {
-    fn from(e: tla_values::Error) -> Self {
+impl From<tlaplus_values::Error> for Error {
+    fn from(e: tlaplus_values::Error) -> Self {
         Self::Evaluation(e.into())
     }
 }

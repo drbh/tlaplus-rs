@@ -1,10 +1,12 @@
 [package]
-name = "tla-modules"
+name = "tlaplus-modules"
 version.workspace = true
 edition.workspace = true
-publish.workspace = true
+description = "Module loading and the standard TLA+ modules for tlaplus-rs"
+license.workspace = true
+repository.workspace = true
 
 [dependencies]
-tla-syntax = { path = "../tla-syntax" }
-tla-ir = { path = "../tla-ir" }
-tla-parser = { path = "../tla-parser" }
+tlaplus-syntax = { path = "../tla-syntax", version = "0.1.0" }
+tlaplus-ir = { path = "../tla-ir", version = "0.1.0" }
+tlaplus-parser = { path = "../tla-parser", version = "0.1.0" }

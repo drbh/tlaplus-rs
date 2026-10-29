@@ -8,7 +8,7 @@ use std::{
     sync::{Arc, Mutex},
     thread::{self, ThreadId},
 };
-use tla_values::Error;
+use tlaplus_values::Error;
 
 #[derive(Debug)]
 pub struct Sessions {
@@ -119,9 +119,9 @@ impl Random {
         (high + u64::from(self.bits(27))) as f64 / (1u64 << 53) as f64
     }
 
-    pub fn next_bounded(&mut self, bound: i32) -> Result<i32, tla_values::Error> {
+    pub fn next_bounded(&mut self, bound: i32) -> Result<i32, tlaplus_values::Error> {
         if bound <= 0 {
-            return Err(tla_values::Error::Type("positive random bound"));
+            return Err(tlaplus_values::Error::Type("positive random bound"));
         }
         let mask = bound - 1;
         loop {

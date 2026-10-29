@@ -9,8 +9,8 @@ use std::{
     sync::{Mutex, atomic::AtomicUsize, atomic::Ordering},
     time::{Duration, Instant},
 };
-use tla_bridge::{Answers, Comparison, Outcome};
-use tla_conformance::Case;
+use tlaplus_bridge::{Answers, Comparison, Outcome};
+use tlaplus_conformance::Case;
 
 /// `Match` covers the oracle contract: outcomes, plus counts and depth for successes.
 /// `BothFailed` pairs an unclassified native error with a Java rejection or error; it
@@ -121,10 +121,10 @@ fn classify(expected: &Answers, actual: &Answers, stderr: &str) -> Verdict {
             _ => Verdict::NativeError,
         };
     }
-    match tla_bridge::compare(expected, actual) {
+    match tlaplus_bridge::compare(expected, actual) {
         Comparison::Match => Verdict::Match,
         Comparison::Inconclusive
-            if actual.mode == tla_bridge::Mode::Dfid
+            if actual.mode == tlaplus_bridge::Mode::Dfid
                 && expected.outcome == actual.outcome
                 && actual.outcome != Outcome::Unknown =>
         {

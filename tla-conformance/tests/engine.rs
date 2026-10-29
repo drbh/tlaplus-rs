@@ -1,10 +1,10 @@
 use std::fs;
 use std::path::Path;
 
-use tla_bridge::{
+use tlaplus_bridge::{
     Answers, Comparison, Mode, ModelRequest, Outcome, RunEnv, compare, observe_faithful, with_model,
 };
-use tla_engine::{Completion, Options, ViolationKind, explore, validate_trace};
+use tlaplus_engine::{Completion, Options, ViolationKind, explore, validate_trace};
 
 fn fixture(module: &str, spec: &str, cfg: &str) -> tempfile::TempDir {
     let dir = tempfile::tempdir().unwrap();
@@ -36,7 +36,7 @@ fn compare_model(dir: &Path, module: &str) -> Answers {
                         .map(|s| model.state_values(s))
                         .collect::<Result<Vec<_>, _>>()?;
                     let encoded = serde_json::to_string(&values).unwrap();
-                    let decoded: Vec<Vec<tla_bridge::values::ValueKey>> =
+                    let decoded: Vec<Vec<tlaplus_bridge::values::ValueKey>> =
                         serde_json::from_str(&encoded).unwrap();
                     assert_eq!(values, decoded);
                     match &violation.kind {
@@ -87,13 +87,13 @@ fn compare_model(dir: &Path, module: &str) -> Answers {
                 .properties
                 .first()
                 .and_then(|p| match p.property.kind {
-                    tla_bridge::PropertyKind::Invariant => {
+                    tlaplus_bridge::PropertyKind::Invariant => {
                         Some(ViolationKind::Invariant(p.property.name.clone()))
                     }
-                    tla_bridge::PropertyKind::Initial => {
+                    tlaplus_bridge::PropertyKind::Initial => {
                         Some(ViolationKind::InitialProperty(p.property.name.clone()))
                     }
-                    tla_bridge::PropertyKind::Action => {
+                    tlaplus_bridge::PropertyKind::Action => {
                         Some(ViolationKind::ActionProperty(p.property.name.clone()))
                     }
                     _ => None,
@@ -188,7 +188,7 @@ fn safety_adapter_rejects_liveness_instead_of_reporting_success() {
 
 #[test]
 fn faithful_capture_preserves_original_states_under_alias_and_resets() {
-    use tla_bridge::{observe_faithful, values::ValueKey};
+    use tlaplus_bridge::{observe_faithful, values::ValueKey};
     for (property, expected) in [
         ("BadInit", vec![0]),
         ("BadNext", vec![0, 1]),
@@ -285,8 +285,8 @@ fn first_violation_precedes_later_deadlock_or_evaluation_error() {
 #[test]
 fn faithful_visitors_stop_within_generators_and_preserve_callback_errors() {
     use std::ops::ControlFlow;
-    use tla_bridge::model::{ModelError, Stage};
-    use tla_engine::TransitionSystem;
+    use tlaplus_bridge::model::{ModelError, Stage};
+    use tlaplus_engine::TransitionSystem;
     let spec = r#"---- MODULE Streaming ----
 EXTENDS Naturals, TLC
 VARIABLE x
@@ -323,7 +323,7 @@ Safe == x = 0
                     .is_break()
             );
             assert_eq!(count, 1);
-            use tla_bridge::values::ValueKey;
+            use tlaplus_bridge::values::ValueKey;
             let record =
                 |x| ValueKey::Function(vec![(ValueKey::String("x".into()), ValueKey::Int(x))]);
             assert!(model.validate_safety_records(

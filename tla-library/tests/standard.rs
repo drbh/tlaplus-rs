@@ -1,11 +1,11 @@
-use tla_library::{BagOp, JsonMode, bag, json, stringify};
-use tla_value_expr::{Expr, FunctionKind};
-use tla_values::Value;
+use tlaplus_library::{BagOp, JsonMode, bag, json, stringify};
+use tlaplus_value_expr::{Expr, FunctionKind};
+use tlaplus_values::Value;
 #[test]
 fn integer_equality_reports_nested_offending_values() {
-    use tla_ir::Builtin as B;
+    use tlaplus_ir::Builtin as B;
     assert_eq!(
-        tla_library::apply(
+        tlaplus_library::apply(
             &Expr::tuple(vec![Expr::atom(Value::Int(0))]),
             &Expr::atom(Value::string("a", 0)),
         )
@@ -16,7 +16,7 @@ fn integer_equality_reports_nested_offending_values() {
     for op in [B::Eq, B::Ne] {
         for nested in [false, true] {
             let wrap = |v| if nested { Value::tuple(vec![v]) } else { v };
-            let error = tla_library::apply_builtin(
+            let error = tlaplus_library::apply_builtin(
                 op,
                 vec![wrap(Value::Int(1)), wrap(Value::string("a", 0))],
             )
@@ -27,14 +27,14 @@ fn integer_equality_reports_nested_offending_values() {
             );
         }
         assert_eq!(
-            tla_library::apply_builtin(op, vec![Value::Int(1), Value::model("m", 0)]).unwrap(),
+            tlaplus_library::apply_builtin(op, vec![Value::Int(1), Value::model("m", 0)]).unwrap(),
             Value::Bool(op == B::Ne)
         );
     }
 }
 #[test]
 fn numeric_comparisons_reject_nonintegers_in_operand_order() {
-    use tla_ir::Builtin as B;
+    use tlaplus_ir::Builtin as B;
     for (op, name) in [(B::Lt, "<"), (B::Le, "<="), (B::Gt, ">"), (B::Ge, ">=")] {
         for invalid in [
             Value::Bool(false),
@@ -46,7 +46,7 @@ fn numeric_comparisons_reject_nonintegers_in_operand_order() {
                 ("second", vec![Value::Int(0), invalid.clone()]),
             ] {
                 assert_eq!(
-                    tla_library::apply_builtin(op, args).unwrap_err().0,
+                    tlaplus_library::apply_builtin(op, args).unwrap_err().0,
                     format!(
                         "The {position} argument of {name} should be an integer, but instead it is:\n{}",
                         stringify(&Expr::atom(invalid.clone())).unwrap()
@@ -62,7 +62,7 @@ fn numeric_comparisons_reject_nonintegers_in_operand_order() {
                 _ => a >= b,
             };
             assert_eq!(
-                tla_library::apply_builtin(op, vec![Value::Int(a), Value::Int(b)]).unwrap(),
+                tlaplus_library::apply_builtin(op, vec![Value::Int(a), Value::Int(b)]).unwrap(),
                 Value::Bool(expected)
             );
         }
@@ -70,9 +70,9 @@ fn numeric_comparisons_reject_nonintegers_in_operand_order() {
 }
 #[test]
 fn infinite_membership_errors_preserve_the_value_and_set() {
-    use tla_value_expr::InfiniteSet;
+    use tlaplus_value_expr::InfiniteSet;
     assert_eq!(
-        tla_library::contains(
+        tlaplus_library::contains(
             &Expr::atom(Value::string("a", 0)),
             &Expr::atom(Value::Int(2))
         )
@@ -87,7 +87,7 @@ fn infinite_membership_errors_preserve_the_value_and_set() {
     ] {
         let value = Expr::atom(invalid);
         assert_eq!(
-            tla_library::contains(&Expr::Infinite(kind), &value)
+            tlaplus_library::contains(&Expr::Infinite(kind), &value)
                 .unwrap_err()
                 .0,
             format!(
@@ -104,7 +104,7 @@ fn infinite_membership_errors_preserve_the_value_and_set() {
         (InfiniteSet::Any, Value::Bool(false), true),
     ] {
         assert_eq!(
-            tla_library::contains(&Expr::Infinite(kind), &Expr::atom(value)).unwrap(),
+            tlaplus_library::contains(&Expr::Infinite(kind), &Expr::atom(value)).unwrap(),
             expected
         );
     }
@@ -167,8 +167,8 @@ fn json_and_tla_rendering_preserve_record_tuple_shapes() {
 
 #[test]
 fn model_values_reuse_string_atoms_and_validate_arguments() {
-    use tla_ir::Builtin;
-    use tla_library::apply_builtin;
+    use tlaplus_ir::Builtin;
+    use tlaplus_library::apply_builtin;
     for name in ["", "mv", "k_0", "k_1"] {
         let text = Value::string(name, 17);
         let value = apply_builtin(Builtin::ModelValue, vec![text]).unwrap();
@@ -190,13 +190,13 @@ fn model_values_reuse_string_atoms_and_validate_arguments() {
 
 #[test]
 fn anti_function_inverts_injective_functions() {
-    use tla_ir::Builtin;
+    use tlaplus_ir::Builtin;
     let function = Value::function(vec![
         (Value::string("a", 0), Value::Int(1)),
         (Value::string("b", 1), Value::Int(2)),
     ])
     .unwrap();
-    let inverse = tla_library::apply_builtin(Builtin::AntiFunction, vec![function]).unwrap();
+    let inverse = tlaplus_library::apply_builtin(Builtin::AntiFunction, vec![function]).unwrap();
     assert_eq!(
         inverse.apply(&Value::Int(1)).unwrap(),
         Value::string("a", 0)
@@ -210,13 +210,13 @@ fn anti_function_inverts_injective_functions() {
         (Value::Int(1), Value::Int(1)),
     ])
     .unwrap();
-    assert!(tla_library::apply_builtin(Builtin::AntiFunction, vec![duplicate]).is_err());
+    assert!(tlaplus_library::apply_builtin(Builtin::AntiFunction, vec![duplicate]).is_err());
 }
 
 #[test]
 fn assertion_errors_preserve_the_specification_message() {
-    let error = tla_library::apply_builtin(
-        tla_ir::Builtin::Assert,
+    let error = tlaplus_library::apply_builtin(
+        tlaplus_ir::Builtin::Assert,
         vec![Value::Bool(false), Value::string("transition rejected", 1)],
     )
     .unwrap_err();
@@ -225,8 +225,8 @@ fn assertion_errors_preserve_the_specification_message() {
 
 #[test]
 fn arithmetic_domain_errors_preserve_the_invalid_operand() {
-    use tla_ir::Builtin as B;
-    use tla_library::apply_builtin;
+    use tlaplus_ir::Builtin as B;
+    use tlaplus_library::apply_builtin;
     let calculate = |op, a, b| apply_builtin(op, vec![Value::Int(a), Value::Int(b)]);
     assert_eq!(calculate(B::Div, 1, 0).unwrap_err().0, "division by zero");
     for divisor in [0, -2, i32::MIN] {

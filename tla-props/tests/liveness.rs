@@ -1,5 +1,5 @@
 use std::{collections::BTreeSet, num::NonZeroUsize};
-use tla_props::{Check, Edge, Formula as F, Graph, Lasso, check};
+use tlaplus_props::{Check, Edge, Formula as F, Graph, Lasso, check};
 
 fn edge(from: usize, to: usize, atoms: &[usize]) -> Edge {
     Edge {

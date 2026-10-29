@@ -1,8 +1,8 @@
 use crate::model::Stage;
 use crate::{Model, ModelError};
 use std::collections::HashMap;
-use tla_ir::{Builtin, Expr, ExprId, Level, Program};
-use tla_model::BoundModel;
+use tlaplus_ir::{Builtin, Expr, ExprId, Level, Program};
+use tlaplus_model::BoundModel;
 use tla_sany_semantic::{NodeId, nodes::NodeData};
 use tla_tlc_eval::{TlcState, context::Context, context::Obj, spec::Action};
 use tla_tlc_value::{TlcError, Value};
@@ -248,7 +248,7 @@ impl<'a> Lower<'a> {
             (slot, None)
         };
         let operator = self.program.operators.len();
-        self.program.operators.push(tla_ir::Operator {
+        self.program.operators.push(tlaplus_ir::Operator {
             name: name.clone(),
             parameters: vec![slot],
             body: 0,
@@ -406,7 +406,7 @@ impl<'a> Lower<'a> {
                 .collect::<Vec<_>>();
             let op = self.program.operators.len();
             self.cache.operators.insert(id, op);
-            self.program.operators.push(tla_ir::Operator {
+            self.program.operators.push(tlaplus_ir::Operator {
                 name,
                 parameters: slots.clone(),
                 body: 0,
@@ -597,7 +597,7 @@ impl Model {
     pub fn constant_expression(
         &self,
         name: &str,
-    ) -> Result<(Program, ExprId, Result<tla_values::Value, TlcError>), ModelError> {
+    ) -> Result<(Program, ExprId, Result<tlaplus_values::Value, TlcError>), ModelError> {
         let graph = self.tool.graph();
         let id = graph
             .node_ids()
@@ -640,7 +640,7 @@ impl Model {
 impl Model {
     pub(crate) fn lower_symmetry(
         &self,
-    ) -> Result<Vec<Vec<(tla_values::Value, tla_values::Value)>>, ModelError> {
+    ) -> Result<Vec<Vec<(tlaplus_values::Value, tlaplus_values::Value)>>, ModelError> {
         let mut result = Vec::new();
         for permutation in self.processed.symmetry_perms.iter().flatten() {
             let mut entries = Vec::new();
@@ -662,17 +662,17 @@ impl Model {
 impl Lower<'_> {
     pub(crate) fn builtin(
         &mut self,
-        op: tla_ir::Builtin,
+        op: tlaplus_ir::Builtin,
         args: Vec<ExprId>,
         literal_message: bool,
-        level: tla_ir::Level,
+        level: tlaplus_ir::Level,
     ) -> Result<ExprId, ModelError> {
         self.program
             .checked_apply(op, args, literal_message, level)
             .map_err(|e| ModelError::message(Stage::Load, e))
     }
 
-    pub(crate) fn finish(mut self) -> Result<tla_ir::Program, ModelError> {
+    pub(crate) fn finish(mut self) -> Result<tlaplus_ir::Program, ModelError> {
         self.program
             .specialize_calls()
             .map_err(|e| ModelError::message(Stage::Load, e))?;

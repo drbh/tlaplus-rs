@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, fs, io::Read, path::Path};
-use tla_bridge::{Answers, FaithfulArgs, FaithfulRunMode, Mode, Outcome, tool::Message};
-use tla_conformance::Request;
+use tlaplus_bridge::{Answers, FaithfulArgs, FaithfulRunMode, Mode, Outcome, tool::Message};
+use tlaplus_conformance::Request;
 
 /// Native CLI arguments for a recorded TLC request, and whether DFID was requested.
 /// DFID runs are checked by BFS; only mode-independent answers are compared.
@@ -119,7 +119,7 @@ pub fn expected(path: &Path, ids: &[String]) -> Result<BTreeMap<String, Answers>
         .filter_map(|id| id.strip_prefix("fuzz/"))
         .collect();
     if fuzz.len() != ids.len() {
-        return Ok(tla_bridge::corpus::Corpus::read(path)
+        return Ok(tlaplus_bridge::corpus::Corpus::read(path)
             .map_err(|e| e.to_string())?
             .answers);
     }
@@ -145,12 +145,12 @@ pub fn expected(path: &Path, ids: &[String]) -> Result<BTreeMap<String, Answers>
                     })
                     .collect::<Vec<_>>();
                 let exit = java["exit"].as_i64().map(|e| e as i32);
-                let mut answers = tla_bridge::tool::extract_messages(&messages, exit)
+                let mut answers = tlaplus_bridge::tool::extract_messages(&messages, exit)
                     .map_err(|e| e.to_string())?;
                 // A run that ended in an exception or evaluation error has no verdict,
                 // even if `-continue` reported violations before it.
                 if messages.iter().any(|m| matches!(m.code, 1000 | 2283)) {
-                    answers.outcome = tla_bridge::Outcome::Unknown;
+                    answers.outcome = tlaplus_bridge::Outcome::Unknown;
                 }
                 answers
             }

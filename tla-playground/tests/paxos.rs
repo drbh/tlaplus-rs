@@ -119,7 +119,7 @@ fn both_paxos_exports_agree_with_tlc() {
         (GOOD, 0, "1696 distinct states found"),
         (BROKEN, 12, "Invariant Agreement is violated"),
     ] {
-        let artifact = tla_dsl::compile(source).unwrap();
+        let artifact = tlaplus_dsl::compile(source).unwrap();
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(
             dir.path().join(format!("{}.tla", artifact.module)),

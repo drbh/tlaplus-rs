@@ -1,6 +1,6 @@
 use std::{num::NonZeroUsize, ops::ControlFlow};
-use tla_engine::{Completion, Options, Transition, TransitionSystem, explore, explore_parallel};
-use tla_observe::{Diagnosed, Phase};
+use tlaplus_engine::{Completion, Options, Transition, TransitionSystem, explore, explore_parallel};
+use tlaplus_observe::{Diagnosed, Phase};
 
 struct Model(Phase);
 impl Model {

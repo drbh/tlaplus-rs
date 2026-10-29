@@ -1,13 +1,15 @@
 [package]
-name = "tla-random"
+name = "tlaplus-random"
 version.workspace = true
 edition.workspace = true
-publish.workspace = true
+description = "Randomization module operators for tlaplus-rs"
+license.workspace = true
+repository.workspace = true
 
 [dependencies]
 num-bigint = "0.4"
-tla-value-expr = { path = "../tla-value-expr" }
-tla-values = { path = "../tla-values" }
+tlaplus-value-expr = { path = "../tla-value-expr", version = "0.1.0" }
+tlaplus-values = { path = "../tla-values", version = "0.1.0" }
 
 [dev-dependencies]
-tla-eval = { path = "../tla-eval" }
+tlaplus-eval = { path = "../tla-eval" }

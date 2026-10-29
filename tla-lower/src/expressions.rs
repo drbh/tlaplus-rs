@@ -1,8 +1,8 @@
 use crate::{Binding, Lower, Scope};
 use std::collections::BTreeMap;
-use tla_ir::{Builtin as B, Expr as I, ExprId, Level, Literal, Operator, Quantifier};
-use tla_modules::Error;
-use tla_syntax::{Definition, Expr};
+use tlaplus_ir::{Builtin as B, Expr as I, ExprId, Level, Literal, Operator, Quantifier};
+use tlaplus_modules::Error;
+use tlaplus_syntax::{Definition, Expr};
 
 impl Lower<'_> {
     pub(crate) fn expr(&mut self, expression: &Expr) -> Result<ExprId, Error> {
@@ -345,7 +345,7 @@ impl Lower<'_> {
                     .cloned()
                     .zip(args.iter().cloned())
                     .collect();
-                if let Ok(body) = tla_syntax::substitute(&definition.body, &replacements) {
+                if let Ok(body) = tlaplus_syntax::substitute(&definition.body, &replacements) {
                     active.push(name.clone());
                     self.primed_compounds(&body, output, active);
                     active.pop();

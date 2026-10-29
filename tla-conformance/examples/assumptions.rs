@@ -2,8 +2,8 @@ pub mod support;
 
 use serde::{Deserialize, Serialize};
 use std::{fs, time::Duration};
-use tla_bridge::with_loaded_model;
-use tla_conformance::{Case, Execution, Request, execute_suite};
+use tlaplus_bridge::with_loaded_model;
+use tlaplus_conformance::{Case, Execution, Request, execute_suite};
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 enum Verdict {
@@ -68,7 +68,7 @@ fn measure(request: Request) -> Result<Comparison, String> {
     for (index, id) in assumptions {
         let result = model
             .evaluate(id, &[], &[])
-            .and_then(|value| value.boolean().map_err(tla_model::Error::from))
+            .and_then(|value| value.boolean().map_err(tlaplus_model::Error::from))
             .map_err(|e| e.to_string());
         actual = Verdict::from_result(index, result, false);
         if actual != Verdict::Satisfied {
@@ -131,7 +131,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tla_bridge::{ModelRequest, model::Stage, with_model};
+    use tlaplus_bridge::{ModelRequest, model::Stage, with_model};
     fn fixture(body: &str) -> tempfile::TempDir {
         let dir = tempfile::tempdir().unwrap();
         fs::write(

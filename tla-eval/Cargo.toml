@@ -1,14 +1,16 @@
 [package]
-name = "tla-eval"
+name = "tlaplus-eval"
 version.workspace = true
 edition.workspace = true
-publish.workspace = true
+description = "IR interpretation for tlaplus-rs"
+license.workspace = true
+repository.workspace = true
 
 [dependencies]
-tla-runtime = { path = "../tla-runtime" }
-tla-random = { path = "../tla-random" }
-tla-library = { path = "../tla-library" }
+tlaplus-runtime = { path = "../tla-runtime", version = "0.1.0" }
+tlaplus-random = { path = "../tla-random", version = "0.1.0" }
+tlaplus-library = { path = "../tla-library", version = "0.1.0" }
 stacker = "0.1"
-tla-value-expr = { path = "../tla-value-expr" }
-tla-ir = { path = "../tla-ir" }
-tla-values = { path = "../tla-values" }
+tlaplus-value-expr = { path = "../tla-value-expr", version = "0.1.0" }
+tlaplus-ir = { path = "../tla-ir", version = "0.1.0" }
+tlaplus-values = { path = "../tla-values", version = "0.1.0" }

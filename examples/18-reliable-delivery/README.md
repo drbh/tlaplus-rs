@@ -3,7 +3,7 @@
 [Run the model](ReliableDelivery.tsl):
 
 ```sh
-cargo run -p tla-cli -- examples/18-reliable-delivery/ReliableDelivery.tsl
+cargo run -p tlaplus-cli -- examples/18-reliable-delivery/ReliableDelivery.tsl
 ```
 
 Expected: **100 reachable states**, safety checks pass, and `AllComplete` passes.
@@ -54,7 +54,7 @@ with separate domain and atomic-composition examples:
 ```sh
 JAVA=/absolute/path/to/java \
 TLA2TOOLS_JAR=/absolute/path/to/tla2tools.jar \
-cargo test -p tla-cli --test tlc_dsl -- --ignored
+cargo test -p tlaplus-cli --test tlc_dsl -- --ignored
 ```
 
 These two clients are instances represented by indexed state and parameterized

@@ -1,8 +1,8 @@
 [package]
-name = "tla-conformance"
+name = "tlaplus-conformance"
 version.workspace = true
 edition.workspace = true
-publish.workspace = true
+publish = false
 description = "Bounded execution and differential tests for the rewrite"
 
 [dependencies]
@@ -12,10 +12,10 @@ tempfile = "3"
 flate2 = "1"
 
 [dev-dependencies]
-tla-bridge = { path = "../tla-bridge" }
-tla-engine = { path = "../tla-engine" }
-tla-eval = { path = "../tla-eval" }
-tla-disk = { path = "../tla-disk" }
-tla-model = { path = "../tla-model" }
-tla-observe = { path = "../tla-observe" }
-tla-values = { path = "../tla-values" }
+tlaplus-bridge = { path = "../tla-bridge" }
+tlaplus-engine = { path = "../tla-engine" }
+tlaplus-eval = { path = "../tla-eval" }
+tlaplus-disk = { path = "../tla-disk" }
+tlaplus-model = { path = "../tla-model" }
+tlaplus-observe = { path = "../tla-observe" }
+tlaplus-values = { path = "../tla-values" }

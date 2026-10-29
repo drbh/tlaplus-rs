@@ -1,6 +1,6 @@
-pub use tla_value_expr::stringify;
-use tla_value_expr::{Expr, FunctionKind, quoted};
-use tla_values::{Error, Value};
+pub use tlaplus_value_expr::stringify;
+use tlaplus_value_expr::{Expr, FunctionKind, quoted};
+use tlaplus_values::{Error, Value};
 
 #[derive(Clone, Copy)]
 pub enum BooleanContext {
@@ -66,7 +66,7 @@ pub fn boolean(
     Err(Error::BooleanContext(message))
 }
 
-pub fn contextual_error(program: &tla_ir::Program, id: usize, error: String) -> String {
+pub fn contextual_error(program: &tlaplus_ir::Program, id: usize, error: String) -> String {
     if matches!(error.as_str(), "Incomparable" | "recursion limit exceeded") {
         return format!("{error} at expression {id}: {:?}", program.nodes[id].expr);
     }
@@ -110,11 +110,11 @@ pub enum JsonMode {
     Object,
 }
 pub fn integer_comparison(
-    op: tla_ir::Builtin,
+    op: tlaplus_ir::Builtin,
     left: &Expr,
     right: &Expr,
 ) -> Result<bool, crate::Error> {
-    use tla_ir::Builtin as B;
+    use tlaplus_ir::Builtin as B;
     let name = match op {
         B::Lt => "<",
         B::Le => "<=",

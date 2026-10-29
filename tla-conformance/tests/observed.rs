@@ -2,12 +2,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use tla_bridge::RunOutcome;
-use tla_bridge::corpus::Corpus;
-use tla_bridge::model::ModelInfo;
-use tla_bridge::recording::{self as mp, Record};
-use tla_bridge::tool::{extract_messages, parse_stream};
-use tla_bridge::{
+use tlaplus_bridge::RunOutcome;
+use tlaplus_bridge::corpus::Corpus;
+use tlaplus_bridge::model::ModelInfo;
+use tlaplus_bridge::recording::{self as mp, Record};
+use tlaplus_bridge::tool::{extract_messages, parse_stream};
+use tlaplus_bridge::{
     Comparison, ErrorCategory, ModelRequest, ObservedRun, Outcome, PropertyKind, RunEnv, TraceEnd,
     Verdict, compare, from_outcome, observe_faithful, run_faithful, with_model,
 };
@@ -334,7 +334,7 @@ fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tlaplus-rs-explore")
 }
 
-fn check(module: &str, spec: &str, cfg: &str, outcome: Outcome, exit: i32) -> tla_bridge::Answers {
+fn check(module: &str, spec: &str, cfg: &str, outcome: Outcome, exit: i32) -> tlaplus_bridge::Answers {
     let scratch = tempfile::tempdir().unwrap();
     fs::write(scratch.path().join(format!("{module}.tla")), spec).unwrap();
     fs::write(scratch.path().join(format!("{module}.cfg")), cfg).unwrap();
