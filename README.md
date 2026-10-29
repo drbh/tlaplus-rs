@@ -2,9 +2,17 @@
 
 a model checker for TLA+ written in Rust. it gives the same answers as TLC (verdicts, reachable states, counterexamples) without copying its Java structure or exact output
 
+## install
+
+```bash
+cargo install tlaplus-cli
+```
+
+this puts the `tla` binary on your path. the checker is also a library, [`tlaplus-checker`](https://crates.io/crates/tlaplus-checker)
+
 ## build
 
-with Rust installed through rustup, or from the `nix develop` shell:
+to build from source, with Rust installed through rustup, or from the `nix develop` shell:
 
 ```bash
 git clone https://github.com/drbh/tlaplus-rs.git
